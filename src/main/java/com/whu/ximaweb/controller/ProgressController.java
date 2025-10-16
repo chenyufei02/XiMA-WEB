@@ -1,9 +1,11 @@
 package com.whu.ximaweb.controller;
 
 import com.whu.ximaweb.dto.ApiResponse;
+import com.whu.ximaweb.service.DjiService; // 导入 DjiService
 import com.whu.ximaweb.service.ProgressService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping; // 导入 GetMapping
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -16,18 +18,40 @@ public class ProgressController {
     private ProgressService progressService;
 
     /**
-     * --- 核心修正 ---
-     * 方法的返回类型现在是 ResponseEntity<ApiResponse<Object>>。
-     * Object 表示这次响应我们不返回额外的数据 (data 字段为 null)。
+     * --- 新增部分 ---
+     * 依赖注入我们新创建的 DjiService。
      */
+    @Autowired
+    private DjiService djiService;
+
     @PostMapping("/refresh")
     public ResponseEntity<ApiResponse<Object>> refreshProgress() {
         progressService.refreshActualProgress();
-
-        // 使用我们创建的静态方法来快速构建一个成功的响应对象
         ApiResponse<Object> response = ApiResponse.success("Refresh task started successfully.");
-
-        // 返回这个响应对象。Spring Boot 会自动把它转换成结构清晰的 JSON。
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * --- 新增部分 ---
+     * 创建一个 GET 类型的测试接口，用于验证与大疆司空2 API的连接。
+     * 完整访问路径为: GET http://localhost:8080/api/progress/dji-projects
+     *
+     * @return 返回从大疆API获取到的项目列表JSON字符串。
+     */
+    @GetMapping("/dji-projects")
+    public ResponseEntity<ApiResponse<String>> getDjiProjects() {
+        // 调用 djiService 的 getProjects 方法
+        String projectsJson = djiService.getProjects();
+
+        if (projectsJson != null) {
+            // 如果成功获取到数据，就把它包装在 ApiResponse 中返回
+            return ResponseEntity.ok(ApiResponse.success("Successfully fetched projects from DJI API.", projectsJson));
+        } else {
+            // 如果获取失败，返回一个错误信息
+            ApiResponse<String> errorResponse = new ApiResponse<>();
+            errorResponse.setStatus(500);
+            errorResponse.setMessage("Failed to fetch projects from DJI API.");
+            return ResponseEntity.status(500).body(errorResponse);
+        }
     }
 }
