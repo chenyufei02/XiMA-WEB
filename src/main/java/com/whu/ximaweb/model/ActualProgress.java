@@ -34,4 +34,6 @@ public class ActualProgress {
     private Integer floorLevel;
 
     private LocalDateTime createdAt;
+
+    private Integer projectId;
 }
