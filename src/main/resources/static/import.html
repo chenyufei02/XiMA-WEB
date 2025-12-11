@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>导入大疆司空2项目 - XiMA Web</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background-color: #f5f5f5; }
+        .container { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h2 { border-bottom: 2px solid #007bff; padding-bottom: 10px; color: #333; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; color: #555; }
+        input[type="text"] { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        .btn { padding: 10px 20px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+        .btn:hover { background-color: #0056b3; }
+        .btn-success { background-color: #28a745; }
+        .btn-success:hover { background-color: #218838; }
+
+        /* 项目列表样式 */
+        #project-list { margin-top: 20px; border: 1px solid #eee; display: none; }
+        .project-item { padding: 15px; border-bottom: 1px solid #eee; display: flex; align-items: center; }
+        .project-item:last-child { border-bottom: none; }
+        .project-info { flex: 1; margin-left: 10px; }
+        .project-id { font-size: 12px; color: #999; }
+        .rename-input { width: 200px !important; margin-left: 10px; }
+
+        /* 华为云配置区域 */
+        #obs-config-area { margin-top: 30px; padding-top: 20px; border-top: 1px dashed #ccc; display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>🚀 第一步：关联大疆司空2项目</h2>
+
+    <div class="form-group">
+        <label for="apiKey">大疆组织密钥 (Organization Key)</label>
+        <input type="text" id="apiKey" placeholder="请输入 eyjh 开头的长字符串">
+        <p style="font-size: 12px; color: #666; margin-top: 5px;">
+            获取方式：司空2网页版 -> 我的组织 -> 组织设置 -> 司空Sync -> 复制组织密钥
+        </p>
+    </div>
+
+    <button class="btn" onclick="fetchProjects()">🔍 查询我的项目列表</button>
+
+    <div id="project-list">
+        </div>
+
+    <div id="obs-config-area">
+        <h3>☁️ 第二步：配置华为云存储</h3>
+        <div class="form-group">
+            <label>OBS Endpoint</label>
+            <input type="text" id="obsEndpoint" value="obs.cn-east-3.myhuaweicloud.com">
+        </div>
+        <div class="form-group">
+            <label>Bucket Name (桶名)</label>
+            <input type="text" id="obsBucketName" value="xima-photos-whu">
+        </div>
+        <div class="form-group">
+            <label>Access Key (AK)</label>
+            <input type="text" id="obsAk" placeholder="请输入华为云 AK">
+        </div>
+        <div class="form-group">
+            <label>Secret Key (SK)</label>
+            <input type="text" id="obsSk" placeholder="请输入华为云 SK">
+        </div>
+
+        <div class="form-group">
+            <label>📂 照片文件夹关键词 (过滤规则)</label>
+            <input type="text" id="folderKeyword" value="请勿删" placeholder="例如：请勿删">
+            <p style="font-size: 12px; color: #666;">系统只抓取包含此关键词的文件夹</p>
+        </div>
+
+        <button class="btn btn-success" onclick="submitImport()" style="width: 100%; margin-top: 20px;">✅ 确认导入项目</button>
+    </div>
+</div>
+
+<script>
+    let currentDjiProjects = []; // 暂存查到的项目数据
+
+    // 1. 查询大疆项目列表
+    async function fetchProjects() {
+        const apiKey = document.getElementById('apiKey').value.trim();
+        if (!apiKey) {
+            alert("请先输入大疆组织密钥！");
+            return;
+        }
+
+        const btn = document.querySelector('button');
+        btn.innerText = "查询中...";
+        btn.disabled = true;
+
+        try {
+            // 调用我们写的后端接口
+            const response = await fetch(`/api/projects/dji-workspaces?apiKey=${apiKey}`);
+            const result = await response.json();
+
+            if (result.data && result.data.length > 0) {
+                currentDjiProjects = result.data;
+                renderProjectList(result.data);
+                document.getElementById('project-list').style.display = 'block';
+                document.getElementById('obs-config-area').style.display = 'block';
+            } else {
+                alert("查询成功，但没有找到任何项目。或者后端API路径不对，请检查控制台日志。");
+                console.log("后端返回:", result);
+            }
+        } catch (error) {
+            console.error("请求失败", error);
+            alert("请求失败，请检查后端服务是否启动，或密钥是否正确。");
+        } finally {
+            btn.innerText = "🔍 查询我的项目列表";
+            btn.disabled = false;
+        }
+    }
+
+    // 渲染列表到页面
+    function renderProjectList(projects) {
+        const listDiv = document.getElementById('project-list');
+        listDiv.innerHTML = '<h3 style="padding:10px; background:#f9f9f9; margin:0;">请勾选要导入的项目：</h3>';
+
+        projects.forEach((proj, index) => {
+            const item = document.createElement('div');
+            item.className = 'project-item';
+            item.innerHTML = `
+                <input type="radio" name="selectedProject" value="${index}" id="proj_${index}">
+                <div class="project-info">
+                    <label for="proj_${index}" style="margin:0; cursor:pointer;">${proj.name}</label>
+                    <div class="project-id">UUID: ${proj.workspace_id}</div>
+                </div>
+                <input type="text" class="rename-input" id="rename_${index}" value="${proj.name}" placeholder="重命名...">
+            `;
+            listDiv.appendChild(item);
+        });
+    }
+
+    // 2. 提交导入
+    async function submitImport() {
+        // 获取选中的项目
+        const selectedRadio = document.querySelector('input[name="selectedProject"]:checked');
+        if (!selectedRadio) {
+            alert("请先在列表中勾选一个大疆项目！");
+            return;
+        }
+
+        const index = selectedRadio.value;
+        const originalProj = currentDjiProjects[index];
+        const newName = document.getElementById(`rename_${index}`).value;
+
+        // 构造发送给后端的 DTO 数据
+        const payload = {
+            projectName: newName,
+            djiProjectUuid: originalProj.workspace_id,
+            djiOrgKey: document.getElementById('apiKey').value.trim(),
+
+            obsEndpoint: document.getElementById('obsEndpoint').value.trim(),
+            obsBucketName: document.getElementById('obsBucketName').value.trim(),
+            obsAk: document.getElementById('obsAk').value.trim(),
+            obsSk: document.getElementById('obsSk').value.trim(),
+
+            photoFolderKeyword: document.getElementById('folderKeyword').value.trim()
+        };
+
+        try {
+            const response = await fetch('/api/projects/import', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const result = await response.json();
+
+            if (result.message && result.message.includes("成功")) {
+                alert("🎉 项目导入成功！数据库已更新。");
+                // 可以跳转到首页或清空表单
+            } else {
+                alert("导入失败: " + JSON.stringify(result));
+            }
+        } catch (e) {
+            alert("网络请求异常");
+        }
+    }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>定义电子围栏 - 拐点选择法</title>
+    <style>
+        body { display: flex; height: 100vh; margin: 0; font-family: sans-serif; }
+        /* 左侧：照片选择区 */
+        .sidebar { width: 300px; border-right: 1px solid #ccc; padding: 10px; overflow-y: auto; background: #f9f9f9; }
+        .photo-item { display: flex; align-items: center; padding: 8px; border-bottom: 1px solid #eee; cursor: pointer; }
+        .photo-item:hover { background: #eef; }
+        .photo-item img { width: 50px; height: 50px; object-fit: cover; margin-right: 10px; border-radius: 4px; }
+        .photo-info { font-size: 12px; }
+
+        /* 右侧：画布区 */
+        .main { flex: 1; position: relative; background: #fff; display: flex; flex-direction: column; }
+        #canvas-container { flex: 1; position: relative; border: 2px dashed #ddd; margin: 20px; border-radius: 8px; }
+
+        /* 画布上的点 */
+        .point-marker {
+            position: absolute; width: 14px; height: 14px; background: red; border-radius: 50%;
+            transform: translate(-50%, -50%); cursor: pointer; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            display: flex; align-items: center; justify-content: center; color: white; font-size: 10px;
+        }
+        .point-marker.selected { background: blue; z-index: 10; }
+
+        .toolbar { padding: 10px 20px; background: #eee; display: flex; gap: 10px; align-items: center; }
+    </style>
+</head>
+<body>
+
+<div class="sidebar">
+    <h3>📸 1. 选择拐角照片</h3>
+    <p style="font-size:12px; color:#666;">请勾选代表建筑物边缘拐角的照片（至少3张）</p>
+    <div id="photo-list">
+        <p>加载中...</p>
+    </div>
+</div>
+
+<div class="main">
+    <div class="toolbar">
+        <span>当前项目ID: <input type="number" id="projectIdInput" value="1" style="width:50px"></span>
+        <button onclick="loadPhotos()">🔄 刷新照片</button>
+        <div style="flex:1"></div>
+        <button onclick="clearCanvas()">🗑️ 重置画布</button>
+        <button onclick="saveBoundary()" style="background: green; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer;">💾 保存围栏</button>
+    </div>
+
+    <div id="canvas-container">
+        <p style="position:absolute; top:45%; left:0; width:100%; text-align:center; color:#ccc; pointer-events: none;">
+            选中左侧照片后，此处将自动根据GPS生成相对位置图。<br>
+            请按顺时针点击红点进行连线。
+        </p>
+        <svg id="svg-layer" style="width:100%; height:100%; position:absolute; top:0; left:0; pointer-events: none;"></svg>
+    </div>
+</div>
+
+<script>
+    let allPhotos = [];
+    let selectedPhotos = []; // 存 {lat, lng, id}
+
+    // 1. 加载照片
+    async function loadPhotos() {
+        const projectId = document.getElementById('projectIdInput').value;
+        const listDiv = document.getElementById('photo-list');
+        listDiv.innerHTML = '加载中...';
+
+        try {
+            const res = await fetch(`/api/projects/${projectId}/photos`);
+            const json = await res.json();
+
+            if (json.code === 200 && json.data) {
+                allPhotos = json.data;
+                renderPhotoList(json.data);
+            } else {
+                listDiv.innerHTML = '加载失败: ' + (json.message || '未知错误');
+            }
+        } catch (e) {
+            console.error(e);
+            listDiv.innerHTML = '网络请求错误，请检查控制台';
+        }
+    }
+
+    function renderPhotoList(photos) {
+        const listDiv = document.getElementById('photo-list');
+        listDiv.innerHTML = '';
+
+        if (photos.length === 0) {
+            listDiv.innerHTML = '没有找到照片，请检查关键字设置。';
+            return;
+        }
+
+        photos.forEach(p => {
+            // 模拟 GPS 数据 (因为API列表可能不返回GPS，实际项目可能需要单独查详情)
+            // TODO: 正式上线时，这里必须从 p.metadata 中获取真实 lat/lng
+            // 为了演示效果，我这里先随机生成一下，等你确认接口能返回GPS我们再改
+            const mockLat = 30.5 + Math.random() * 0.001;
+            const mockLng = 114.3 + Math.random() * 0.001;
+
+            const div = document.createElement('div');
+            div.className = 'photo-item';
+            div.innerHTML = `
+                <input type="checkbox" style="margin-right:10px" onchange="togglePhoto('${p.file_id}', ${mockLat}, ${mockLng}, this)">
+                <img src="${p.url || '#'}" alt="图">
+                <div class="photo-info">
+                    <div>${p.name}</div>
+                    <div style="color:#999; font-size:10px;">${mockLat.toFixed(5)}, ${mockLng.toFixed(5)}</div>
+                </div>
+            `;
+            listDiv.appendChild(div);
+        });
+    }
+
+    // 2. 勾选/取消照片 -> 更新画布
+    function togglePhoto(id, lat, lng, checkbox) {
+        if (checkbox.checked) {
+            selectedPhotos.push({id, lat, lng});
+        } else {
+            selectedPhotos = selectedPhotos.filter(p => p.id !== id);
+        }
+        drawCanvas();
+    }
+
+    // 3. 核心算法：把 GPS 映射到 DIV 画布上
+    function drawCanvas() {
+        const container = document.getElementById('canvas-container');
+        // 清空旧点
+        document.querySelectorAll('.point-marker').forEach(e => e.remove());
+
+        if (selectedPhotos.length === 0) return;
+
+        // 找出经纬度的最大最小值，确定缩放比例
+        const lats = selectedPhotos.map(p => p.lat);
+        const lngs = selectedPhotos.map(p => p.lng);
+        const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+        const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+
+        const latRange = maxLat - minLat || 0.0001; // 防止除以0
+        const lngRange = maxLng - minLng || 0.0001;
+
+        const width = container.clientWidth - 100; // 留白
+        const height = container.clientHeight - 100;
+
+        selectedPhotos.forEach((p, index) => {
+            // 归一化坐标 (0.0 ~ 1.0) -> 像素坐标
+            // 注意：纬度越大越靠上(y越小)，所以 y 要反过来
+            const x = ((p.lng - minLng) / lngRange) * width + 50;
+            const y = height - ((p.lat - minLat) / latRange) * height + 50;
+
+            const dot = document.createElement('div');
+            dot.className = 'point-marker';
+            dot.style.left = x + 'px';
+            dot.style.top = y + 'px';
+            dot.innerText = index + 1;
+            dot.title = `Lat:${p.lat}, Lng:${p.lng}`;
+
+            // 存储计算后的像素坐标供连线用
+            p.screenX = x;
+            p.screenY = y;
+
+            container.appendChild(dot);
+        });
+
+        drawPolygon();
+    }
+
+    // 4. 画连线 (SVG)
+    function drawPolygon() {
+        const svg = document.getElementById('svg-layer');
+        if (selectedPhotos.length < 2) {
+            svg.innerHTML = '';
+            return;
+        }
+
+        // 简单按勾选顺序连线 (实际可能需要用户点击排序，这里先演示闭合多边形)
+        let pointsStr = selectedPhotos.map(p => `${p.screenX},${p.screenY}`).join(' ');
+
+        svg.innerHTML = `
+            <polygon points="${pointsStr}" style="fill:rgba(0,0,255,0.1);stroke:blue;stroke-width:2" />
+        `;
+    }
+
+    // 5. 保存
+    async function saveBoundary() {
+        if (selectedPhotos.length < 3) {
+            alert("请至少选择3张照片构成一个面！");
+            return;
+        }
+
+        const projectId = document.getElementById('projectIdInput').value;
+        // 构造传给后端的数据：只传经纬度，不传屏幕坐标
+        const coords = selectedPhotos.map(p => ({ lat: p.lat, lng: p.lng }));
+
+        try {
+            const res = await fetch(`/api/projects/${projectId}/boundary`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(coords)
+            });
+            const json = await res.json();
+            alert(json.message || '保存结果未知');
+        } catch (e) {
+            alert('保存失败');
+        }
+    }
+
+    // 监听窗口大小变化重绘
+    window.onresize = drawCanvas;
+</script>
+
+</body>
+</html>

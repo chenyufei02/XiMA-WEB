@@ -1,56 +1,66 @@
-//package com.whu.ximaweb.service.impl;
-//
-//import com.obs.services.ObsClient;
-//import com.obs.services.model.ObjectListing;
-//import com.obs.services.model.ObsObject;
-//import com.whu.ximaweb.service.ObsService;
-//import org.springframework.beans.factory.annotation.Autowired;
-//import org.springframework.beans.factory.annotation.Value;
-//import org.springframework.stereotype.Service;
-//
-//import java.io.InputStream; // 导入 InputStream
-//import java.util.ArrayList;
-//import java.util.List;
-//
-///**
-// * ObsService 接口的实现类。
-// */
-//@Service
-//public class ObsServiceImpl implements ObsService {
-//
-//    @Autowired
-//    private ObsClient obsClient;
-//
-//    @Value("${huawei.obs.bucket-name}")
-//    private String bucketName;
-//
-//    @Override
-//    public List<ObsObject> listObjects() {
-//        System.out.println("正在从华为云 OBS 列出对象... 桶名称: " + bucketName);
-//        try {
-//            ObjectListing result = obsClient.listObjects(bucketName);
-//            return result.getObjects();
-//        } catch (Exception e) {
-//            System.err.println("访问华为云 OBS 失败！错误: " + e.getMessage());
-//            e.printStackTrace();
-//            return new ArrayList<>();
-//        }
-//    }
-//
-//    /**
-//     * --- 新增方法 ---
-//     * 获取单个对象输入流的具体实现。
-//     */
-//    @Override
-//    public InputStream getObjectInputStream(String objectKey) {
-//        try {
-//            // OBS SDK 的标准用法：调用 getObject 方法，它会返回一个包含文件信息的 ObsObject。
-//            // 它的 .getObjectContent() 方法就是我们需要的输入流。
-//            ObsObject object = obsClient.getObject(bucketName, objectKey);
-//            return object.getObjectContent();
-//        } catch (Exception e) {
-//            System.err.println("获取文件 '" + objectKey + "' 的输入流时失败: " + e.getMessage());
-//            return null; // 失败时返回 null
-//        }
-//    }
-//}
+package com.whu.ximaweb.service.impl;
+
+import com.obs.services.ObsClient;
+import com.whu.ximaweb.service.ObsService;
+import org.springframework.stereotype.Service;
+
+import java.io.IOException;
+import java.io.InputStream;
+
+@Service
+public class ObsServiceImpl implements ObsService {
+
+    @Override
+    public boolean validateConnection(String ak, String sk, String endpoint, String bucketName) {
+        ObsClient obsClient = null;
+        try {
+            obsClient = new ObsClient(ak, sk, endpoint);
+            // 尝试获取桶的元数据，如果账号或桶名不对，这里会抛异常
+            return obsClient.headBucket(bucketName);
+        } catch (Exception e) {
+            System.err.println("OBS连接验证失败: " + e.getMessage());
+            return false;
+        } finally {
+            closeClient(obsClient);
+        }
+    }
+
+    @Override
+    public boolean doesObjectExist(String ak, String sk, String endpoint, String bucketName, String objectKey) {
+        ObsClient obsClient = null;
+        try {
+            obsClient = new ObsClient(ak, sk, endpoint);
+            return obsClient.doesObjectExist(bucketName, objectKey);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        } finally {
+            closeClient(obsClient);
+        }
+    }
+
+    @Override
+    public void uploadStream(String ak, String sk, String endpoint, String bucketName, String objectKey, InputStream stream) {
+        ObsClient obsClient = null;
+        try {
+            obsClient = new ObsClient(ak, sk, endpoint);
+            obsClient.putObject(bucketName, objectKey, stream);
+            System.out.println("成功上传文件至OBS: " + objectKey);
+        } catch (Exception e) {
+            System.err.println("上传OBS失败: " + e.getMessage());
+            throw new RuntimeException("OBS上传失败", e);
+        } finally {
+            closeClient(obsClient);
+        }
+    }
+
+    private void closeClient(ObsClient client) {
+        if (client != null) {
+            try {
+                client.close();
+            } catch (IOException e) {
+                // 忽略关闭时的异常
+            }
+        }
+    }
+}

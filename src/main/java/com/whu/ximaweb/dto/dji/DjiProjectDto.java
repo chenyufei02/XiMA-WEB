@@ -4,20 +4,18 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
-/**
- * 大疆司空2项目信息传输对象
- * 用于映射API返回的 JSON 数据
- */
 @Data
-@JsonIgnoreProperties(ignoreUnknown = true) // 忽略JSON中我们不需要的字段
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class DjiProjectDto {
 
-    @JsonProperty("workspace_id") // 对应大疆JSON中的字段名
+    // 修正点1：文档里项目ID字段叫 "uuid"
+    @JsonProperty("uuid")
     private String workspaceId;
 
     @JsonProperty("name")
     private String name;
 
-    @JsonProperty("description")
+    // 修正点2：文档里简介字段叫 "introduction"
+    @JsonProperty("introduction")
     private String description;
 }
