@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.whu.ximaweb.dto.dji.DjiMediaFileDto;
 import com.whu.ximaweb.dto.dji.DjiProjectDto;
+import com.whu.ximaweb.dto.dji.DjiTaskDto;
 import com.whu.ximaweb.service.DjiService;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -16,7 +17,9 @@ import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Service
 public class DjiServiceImpl implements DjiService {
@@ -33,114 +36,170 @@ public class DjiServiceImpl implements DjiService {
     @Value("${dji.api.base-url}")
     private String djiApiBaseUrl;
 
-    /**
-     * 实现方法1：无参版本
-     * 直接使用默认配置的 Key 获取原始 JSON
-     */
     @Override
     public String getProjects() {
         return fetchProjectsRaw(this.defaultOrganizationKey);
     }
 
-    /**
-     * 实现方法2：有参版本
-     * 使用传入的 Key 获取并解析为 List 对象
-     */
     @Override
     public List<DjiProjectDto> getProjects(String apiKey) {
         String json = fetchProjectsRaw(apiKey);
-        if (json == null) {
-            return new ArrayList<>();
-        }
-
+        if (json == null) return new ArrayList<>();
         try {
             JsonNode root = objectMapper.readTree(json);
-            // 检查业务状态码 (code: 0 表示成功)
-            if (root.has("code") && root.get("code").asInt() != 0) {
-                System.err.println("大疆API业务报错: " + root.path("message").asText());
-                return new ArrayList<>();
-            }
-            // 解析 data.list 节点
+            if (root.has("code") && root.get("code").asInt() != 0) return new ArrayList<>();
             JsonNode listNode = root.path("data").path("list");
             if (listNode.isArray()) {
                 return objectMapper.convertValue(listNode, new TypeReference<List<DjiProjectDto>>() {});
             }
         } catch (Exception e) {
-            System.err.println("JSON解析失败: " + e.getMessage());
+            e.printStackTrace();
         }
         return new ArrayList<>();
     }
 
-    /**
-     * 实现方法3：获取媒体文件列表
-     * 对应接口定义中的 getPhotosFromFolder
-     */
-    @Override
-    public List<DjiMediaFileDto> getPhotosFromFolder(String projectUuid, String apiKey, String folderNameKeyword) {
-        // 注意：此处假设媒体文件接口路径遵循 OpenAPI 规范
-        // 如果实际文档路径不同，请在此处修改 url 字符串
-        String url = djiApiBaseUrl + "/openapi/v0.1/workspaces/" + projectUuid + "/media-files?page=1&page_size=50";
-
-        Request request = new Request.Builder()
-                .url(url)
-                .addHeader("X-User-Token", apiKey)
-                .get()
-                .build();
-
-        try (Response response = httpClient.newCall(request).execute()) {
+    private String fetchProjectsRaw(String apiKey) {
+        String url = djiApiBaseUrl + "/openapi/v0.1/project?page=1&page_size=100";
+        try (Response response = executeRequest(url, apiKey, null)) {
             if (response.isSuccessful() && response.body() != null) {
-                String json = response.body().string();
-                JsonNode root = objectMapper.readTree(json);
-                JsonNode listNode = root.path("data").path("list");
-
-                if (listNode.isArray()) {
-                    List<DjiMediaFileDto> allFiles = objectMapper.convertValue(
-                            listNode, new TypeReference<List<DjiMediaFileDto>>() {}
-                    );
-
-                    // 关键词过滤逻辑
-                    if (folderNameKeyword == null || folderNameKeyword.isEmpty()) {
-                        return allFiles;
-                    }
-                    List<DjiMediaFileDto> filtered = new ArrayList<>();
-                    for (DjiMediaFileDto f : allFiles) {
-                        if (f.getFilePath() != null && f.getFilePath().contains(folderNameKeyword)) {
-                            filtered.add(f);
-                        }
-                    }
-                    return filtered;
-                }
+                return response.body().string();
             }
         } catch (Exception e) {
             e.printStackTrace();
         }
-        return Collections.emptyList();
+        return null;
     }
 
-    // --- 私有辅助方法 ---
+    @Override
+    public List<DjiMediaFileDto> getPhotosFromFolder(String projectUuid, String apiKey, String folderNameKeyword) {
+        List<DjiMediaFileDto> resultList = new ArrayList<>();
 
-    private String fetchProjectsRaw(String apiKey) {
-        // 路径：/openapi/v0.1/project
-        String url = djiApiBaseUrl + "/openapi/v0.1/project";
+        System.out.println("    [DEBUG] 🚀 开始全量扫描 (机场+无人机双重扫描)...");
 
-        System.out.println("正在请求: " + url);
+        // --- 第一步：获取设备列表 ---
+        String devicesUrl = djiApiBaseUrl + "/openapi/v0.1/project/device?page=1&page_size=100";
+        System.out.println("    [DEBUG] 请求设备列表: " + devicesUrl);
 
-        Request request = new Request.Builder()
-                .url(url)
-                .addHeader("X-User-Token", apiKey) // 使用正确的 Header
-                .get()
-                .build();
-
-        try (Response response = httpClient.newCall(request).execute()) {
+        Set<String> allDeviceSns = new HashSet<>();
+        try (Response response = executeRequest(devicesUrl, apiKey, projectUuid)) {
             if (response.isSuccessful() && response.body() != null) {
-                return response.body().string();
+                String json = response.body().string();
+                JsonNode root = objectMapper.readTree(json);
+                JsonNode listNode = root.path("data").path("list");
+                if (listNode != null && listNode.isArray()) {
+                    for (JsonNode deviceNode : listNode) {
+                        // 1. 尝试获取无人的机 SN (Drone)
+                        JsonNode droneNode = deviceNode.path("drone");
+                        if (!droneNode.isMissingNode() && droneNode.has("sn")) {
+                            String sn = droneNode.get("sn").asText();
+                            String name = droneNode.path("device_model").path("name").asText("未知飞机");
+                            System.out.println("       🚁 发现飞机: " + name + " [SN: " + sn + "]");
+                            allDeviceSns.add(sn);
+                        }
+
+                        // 2. 尝试获取机场的 SN (Gateway/Dock) - ✅ 关键修正！
+                        JsonNode gatewayNode = deviceNode.path("gateway");
+                        if (!gatewayNode.isMissingNode() && gatewayNode.has("sn")) {
+                            String sn = gatewayNode.get("sn").asText();
+                            String name = gatewayNode.path("device_model").path("name").asText("未知机场");
+                            System.out.println("       🏠 发现机场: " + name + " [SN: " + sn + "]");
+                            allDeviceSns.add(sn);
+                        }
+                    }
+                }
             } else {
-                System.err.println("API请求失败 Code: " + response.code());
-                return null;
+                 System.err.println("    [ERROR] 获取设备失败. HTTP Code: " + response.code());
             }
-        } catch (IOException e) {
-            e.printStackTrace();
-            return null;
+        } catch (Exception e) {
+             System.err.println("    [EXCEPTION] 获取设备异常: " + e.getMessage());
         }
+
+        if (allDeviceSns.isEmpty()) {
+            System.out.println("    ⚠️ 未发现任何设备SN，流程终止。");
+            return Collections.emptyList();
+        }
+
+        // --- 第二步：查询任务 ---
+        long now = System.currentTimeMillis() / 1000;
+        long endTime = now + 24 * 60 * 60;
+        long startTime = now - 90 * 24 * 60 * 60;
+
+        for (String sn : allDeviceSns) {
+            String taskListUrl = djiApiBaseUrl + "/openapi/v0.1/flight-task/list" +
+                    "?page=1&page_size=50" +
+                    "&begin_at=" + startTime +
+                    "&end_at=" + endTime +
+                    "&sn=" + sn;
+
+            System.out.println("    --------------------------------------------------");
+            System.out.println("    [DEBUG] 查询设备 [" + sn + "] 的任务...");
+
+            try (Response response = executeRequest(taskListUrl, apiKey, projectUuid)) {
+                if (response.body() != null) {
+                    String json = response.body().string();
+                    // 打印 RAW JSON 以便确认
+                    // System.out.println("    [RAW_JSON] " + json);
+
+                    if (response.isSuccessful()) {
+                        JsonNode root = objectMapper.readTree(json);
+                        JsonNode listNode = root.path("data").path("list");
+
+                        if (listNode != null && listNode.isArray()) {
+                            List<DjiTaskDto> tasks = objectMapper.convertValue(listNode, new TypeReference<List<DjiTaskDto>>() {});
+                            System.out.println("    📄 找到 " + tasks.size() + " 个任务");
+
+                            for (DjiTaskDto task : tasks) {
+                                boolean nameMatched = folderNameKeyword == null || (task.getName() != null && task.getName().contains(folderNameKeyword));
+                                boolean statusMatched = !"failed".equalsIgnoreCase(task.getStatus());
+
+                                System.out.print("       > 检查 [" + task.getName() + "] (" + task.getStatus() + ")");
+
+                                if (nameMatched && statusMatched) {
+                                    System.out.println(" -> ✅ 命中! 下载中...");
+                                    String mediaUrl = djiApiBaseUrl + "/openapi/v0.1/flight-task/" + task.getUuid() + "/media";
+                                    try (Response mediaResp = executeRequest(mediaUrl, apiKey, projectUuid)) {
+                                        if (mediaResp.isSuccessful() && mediaResp.body() != null) {
+                                            String mediaJson = mediaResp.body().string();
+                                            JsonNode mediaRoot = objectMapper.readTree(mediaJson);
+                                            JsonNode mediaList = mediaRoot.path("data").path("list");
+                                            if (mediaList != null && mediaList.isArray()) {
+                                                List<DjiMediaFileDto> files = objectMapper.convertValue(mediaList, new TypeReference<List<DjiMediaFileDto>>() {});
+
+                                                System.out.println("         📸 发现 " + files.size() + " 张照片");
+
+                                                String safeTime = (task.getBeginAt() != null) ? task.getBeginAt().replaceAll("[: ]", "-") : "unknown";
+                                                String virtualPath = "/" + folderNameKeyword + "/" + task.getName() + "_" + safeTime;
+                                                for (DjiMediaFileDto f : files) {
+                                                    f.setFilePath(virtualPath);
+                                                    resultList.add(f);
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    System.out.println(" -> 跳过");
+                                }
+                            }
+                        } else {
+                             System.out.println("    ⚠️ 无任务 (list=null/empty)");
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        return resultList;
+    }
+
+    private Response executeRequest(String url, String apiKey, String projectUuid) throws IOException {
+        Request.Builder builder = new Request.Builder()
+                .url(url)
+                .addHeader("X-User-Token", apiKey);
+        if (projectUuid != null && !projectUuid.isEmpty()) {
+            builder.addHeader("X-Project-Uuid", projectUuid);
+        }
+        return httpClient.newCall(builder.build()).execute();
     }
 }

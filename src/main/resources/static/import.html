@@ -36,7 +36,7 @@
         <label for="apiKey">大疆组织密钥 (Organization Key)</label>
         <input type="text" id="apiKey" placeholder="请输入 eyjh 开头的长字符串">
         <p style="font-size: 12px; color: #666; margin-top: 5px;">
-            获取方式：司空2网页版 -> 我的组织 -> 组织设置 -> 司空Sync -> 复制组织密钥
+            获取方式：司空2网页版 -> 右上角图标处 -> 我的组织 -> 组织设置 -> 司空Sync -> 复制组织密钥
         </p>
     </div>
 
@@ -66,7 +66,7 @@
 
         <div class="form-group">
             <label>📂 照片文件夹关键词 (过滤规则)</label>
-            <input type="text" id="folderKeyword" value="请勿删" placeholder="例如：请勿删">
+            <input type="text" id="folderKeyword" value="激光测距" placeholder="例如：激光测距">
             <p style="font-size: 12px; color: #666;">系统只抓取包含此关键词的文件夹</p>
         </div>
 
@@ -124,7 +124,7 @@
                 <input type="radio" name="selectedProject" value="${index}" id="proj_${index}">
                 <div class="project-info">
                     <label for="proj_${index}" style="margin:0; cursor:pointer;">${proj.name}</label>
-                    <div class="project-id">UUID: ${proj.workspace_id}</div>
+                    <div class="project-id">UUID: ${proj.uuid}</div>
                 </div>
                 <input type="text" class="rename-input" id="rename_${index}" value="${proj.name}" placeholder="重命名...">
             `;
@@ -148,7 +148,7 @@
         // 构造发送给后端的 DTO 数据
         const payload = {
             projectName: newName,
-            djiProjectUuid: originalProj.workspace_id,
+            djiProjectUuid: originalProj.uuid,
             djiOrgKey: document.getElementById('apiKey').value.trim(),
 
             obsEndpoint: document.getElementById('obsEndpoint').value.trim(),
