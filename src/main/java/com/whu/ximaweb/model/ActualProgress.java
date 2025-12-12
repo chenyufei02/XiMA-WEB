@@ -11,29 +11,63 @@ import java.time.LocalDateTime;
 
 /**
  * 实际进度实体类
- * 这个类对应数据库中的 `actual_progress` 表。
+ * 记录每一栋楼、每一天的施工进度计算结果及原始参数
  */
-@Data // @Data 是 Lombok 提供的注解，它会自动为我们生成 getter, setter, toString, equals, hashCode 等方法，让代码非常简洁。
-@TableName("actual_progress") // @TableName 注解告诉 Mybatis-Plus，这个类对应的是数据库中的 "actual_progress" 表。
+@Data
+@TableName("actual_progress")
 public class ActualProgress {
 
-    /**
-     * @TableId 注解表明这个属性是表的主键。
-     * type = IdType.AUTO 表示主键是自增的。
-     */
     @TableId(type = IdType.AUTO)
     private Integer id;
 
-    private String projectName;
+    private Integer projectId; // 项目ID
+
+    /**
+     * 新增：所属楼栋ID
+     * 进度数据现在精确到"栋"
+     */
+    private Integer buildingId;
+
+    private String projectName; // 冗余字段，保留以便快速查看
 
     private LocalDate measurementDate;
 
-    // 对于金额、高度等需要精确计算的数字，我们使用 BigDecimal 类型，而不是 double，可以避免精度丢失。
+    // --- 计算结果 ---
+
+    /**
+     * 当天计算出的实际建筑高度 (h2 - h1)
+     */
     private BigDecimal actualHeight;
 
+    /**
+     * 根据高度换算出的楼层数
+     */
     private Integer floorLevel;
 
-    private LocalDateTime createdAt;
+    // --- 核心算法参数 (新增) ---
 
-    private Integer projectId;
+    /**
+     * 当天测量的楼顶距离 (h1, 平均值)
+     */
+    private BigDecimal h1Val;
+
+    /**
+     * 当天使用的地面基准距离 (h2)
+     * 注意：这可能是实测值，也可能是基于历史推算的
+     */
+    private BigDecimal h2Val;
+
+    /**
+     * h2是否为实测?
+     * true(1)=实测, false(0)=推算
+     */
+    private Boolean isH2Measured;
+
+    /**
+     * 拍摄时的无人机绝对高度
+     * 如果是实测h2，此值必填，作为下一次推算的基准(Ref_Alt)
+     */
+    private BigDecimal droneAlt;
+
+    private LocalDateTime createdAt;
 }
