@@ -2,8 +2,10 @@ package com.whu.ximaweb.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.whu.ximaweb.dto.ProjectImportRequest;
+import com.whu.ximaweb.mapper.SysBuildingMapper;
 import com.whu.ximaweb.mapper.SysProjectMapper;
 import com.whu.ximaweb.mapper.SysUserProjectMapper;
+import com.whu.ximaweb.model.SysBuilding;
 import com.whu.ximaweb.model.SysProject;
 import com.whu.ximaweb.model.SysUserProject;
 import com.whu.ximaweb.service.ProjectService;
@@ -26,6 +28,10 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Autowired
     private SysUserProjectMapper sysUserProjectMapper;
+
+    // 新增：需要操作楼栋表
+    @Autowired
+    private SysBuildingMapper sysBuildingMapper;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -76,25 +82,43 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     /**
-     * 更新项目的电子围栏
-     * @param projectId 项目ID
-     * @param coords 前端传来的坐标点列表
+     * 更新项目的电子围栏 (修正版)
+     * 逻辑变更：围栏现在属于"楼栋"。
+     * 兼容策略：如果前端没传楼栋ID，默认操作该项目下的"默认教学楼"。
      */
     public void updateBoundary(Integer projectId, java.util.List<com.whu.ximaweb.dto.Coordinate> coords) {
+        // 1. 检查项目是否存在
         SysProject project = sysProjectMapper.selectById(projectId);
         if (project == null) {
             throw new RuntimeException("项目不存在");
         }
 
         try {
-            // 把 List<Coordinate> 转成 JSON 字符串存入数据库
-            // 例如转成String: "[{\"lat\":30.1,\"lng\":114.2},...]"
             String jsonCoords = objectMapper.writeValueAsString(coords);
 
-            project.setBoundaryCoords(jsonCoords);
-            sysProjectMapper.updateById(project);
+            // 2. 查找该项目下是否已有楼栋
+            QueryWrapper<SysBuilding> query = new QueryWrapper<>();
+            query.eq("project_id", projectId);
+            // 只要第一条
+            query.last("LIMIT 1");
+            SysBuilding building = sysBuildingMapper.selectOne(query);
 
-            System.out.println("项目 [" + projectId + "] 围栏更新成功: " + jsonCoords);
+            if (building == null) {
+                // 如果没有，自动创建一个默认楼栋
+                building = new SysBuilding();
+                building.setProjectId(projectId);
+                building.setName("默认教学楼"); // 默认名
+                building.setBoundaryCoords(jsonCoords);
+                building.setCreatedAt(LocalDateTime.now());
+                sysBuildingMapper.insert(building);
+                System.out.println("已为项目 [" + projectId + "] 创建默认楼栋并设置围栏");
+            } else {
+                // 如果有，更新它
+                building.setBoundaryCoords(jsonCoords);
+                sysBuildingMapper.updateById(building);
+                System.out.println("已更新楼栋 [" + building.getName() + "] 的围栏");
+            }
+
         } catch (Exception e) {
             throw new RuntimeException("坐标保存失败: " + e.getMessage());
         }

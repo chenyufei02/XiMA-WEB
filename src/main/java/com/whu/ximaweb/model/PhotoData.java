@@ -3,28 +3,23 @@ package com.whu.ximaweb.model;
 import java.time.LocalDate;
 
 /**
- * 照片数据模型类 (一个数据 "收纳盒")
- * 这个类的作用是，把从一张照片元数据中解析出来的、我们关心的所有信息，
- * 有条理地存储在一个 Java 对象中。
+ * 照片数据模型类
  */
 public class PhotoData {
 
-    /**
-     * 枚举类型，用来清晰地表示这张照片是测量楼顶(H1)还是地面(H2)。
-     */
     public enum MeasurementType {
-        H1_ROOF, // 测量楼顶
-        H2_GROUND, // 测量地面
-        UNKNOWN  // 未知或无法判断
+        H1_ROOF,
+        H2_GROUND,
+        UNKNOWN
     }
 
-    private final String fileName; // 照片的文件名
-    private final LocalDate captureDate; // 拍摄日期
-    private final MeasurementType type; // 测量的类型 (H1 还是 H2)
-    private final double distance; // 激光测距的距离
-    private final double absoluteAltitude; // 目标的绝对高度
-    private final double latitude; // 目标的纬度
-    private final double longitude; // 目标的经度
+    private final String fileName;
+    private final LocalDate captureDate;
+    private final MeasurementType type;
+    private final double distance;
+    private final double absoluteAltitude;
+    private final double latitude;  // 纬度
+    private final double longitude; // 经度
 
     public PhotoData(String fileName, LocalDate captureDate, MeasurementType type, double distance,
                      double absoluteAltitude, double latitude, double longitude) {
@@ -37,19 +32,17 @@ public class PhotoData {
         this.longitude = longitude;
     }
 
-    // --- Getter 方法 ---
+    // --- Getter 方法 (补全缺失的部分) ---
 
-    public LocalDate getCaptureDate() {
-        return captureDate;
-    }
+    public String getFileName() { return fileName; }
+    public LocalDate getCaptureDate() { return captureDate; }
+    public MeasurementType getType() { return type; }
+    public double getDistance() { return distance; }
 
-    public MeasurementType getType() {
-        return type;
-    }
-
-    public double getDistance() {
-        return distance;
-    }
+    // 补上这三个缺失的方法：
+    public double getAbsoluteAltitude() { return absoluteAltitude; }
+    public double getLatitude() { return latitude; }
+    public double getLongitude() { return longitude; }
 
     @Override
     public String toString() {
