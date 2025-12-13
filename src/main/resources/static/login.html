@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>西马路项目管理 - 登录</title>
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <style>
+        body { margin: 0; background-color: #2d3a4b; height: 100vh; display: flex; justify-content: center; align-items: center; }
+        .login-card { width: 400px; padding: 30px; background: #fff; border-radius: 6px; box-shadow: 0 2px 12px 0 rgba(0,0,0,0.1); }
+        .title { text-align: center; font-size: 24px; font-weight: bold; margin-bottom: 30px; color: #333; }
+        .btn-login { width: 100%; font-size: 16px; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="login-card">
+            <div class="title">🏗️ 项目进度监测系统</div>
+            <el-form :model="form" ref="loginForm">
+                <el-form-item>
+                    <el-input v-model="form.username" prefix-icon="el-icon-user" placeholder="用户名 (admin)"></el-input>
+                </el-form-item>
+                <el-form-item>
+                    <el-input v-model="form.password" prefix-icon="el-icon-lock" type="password" placeholder="密码 (123)" @keyup.enter.native="handleLogin"></el-input>
+                </el-form-item>
+                <el-form-item>
+                    <el-button type="primary" :loading="loading" class="btn-login" @click="handleLogin">登 录</el-button>
+                </el-form-item>
+            </el-form>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/vue@2/dist/vue.js"></script>
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+
+    <script>
+        new Vue({
+            el: '#app',
+            data: {
+                loading: false,
+                form: { username: 'admin', password: '123' } // 默认填好方便调试
+            },
+            methods: {
+                handleLogin() {
+                    if(!this.form.username || !this.form.password) return this.$message.warning('请输入账号密码');
+
+                    this.loading = true;
+                    // 发送登录请求
+                    axios.post(`/api/auth/login?username=${this.form.username}&password=${this.form.password}`)
+                        .then(res => {
+                            if (res.data.code === 200) {
+                                this.$message.success('登录成功，正在跳转...');
+                                // 1. 保存 Token 到本地
+                                localStorage.setItem('token', res.data.data.token);
+                                localStorage.setItem('username', res.data.data.username);
+                                // 2. 跳转到首页
+                                setTimeout(() => window.location.href = 'index.html', 1000);
+                            } else {
+                                this.$message.error(res.data.message || '登录失败');
+                            }
+                        })
+                        .catch(err => this.$message.error('连接服务器失败'))
+                        .finally(() => this.loading = false);
+                }
+            }
+        });
+    </script>
+</body>
+</html>

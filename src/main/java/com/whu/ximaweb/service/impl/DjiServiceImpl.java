@@ -15,6 +15,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -74,12 +77,10 @@ public class DjiServiceImpl implements DjiService {
     public List<DjiMediaFileDto> getPhotosFromFolder(String projectUuid, String apiKey, String folderNameKeyword) {
         List<DjiMediaFileDto> resultList = new ArrayList<>();
 
-        System.out.println("    [DEBUG] 🚀 开始全量扫描 (机场+无人机双重扫描)...");
+        System.out.println("    [DEBUG] 🚀 开始全量扫描 (修正路径版)...");
 
-        // --- 第一步：获取设备列表 ---
+        // 1. 获取设备
         String devicesUrl = djiApiBaseUrl + "/openapi/v0.1/project/device?page=1&page_size=100";
-        System.out.println("    [DEBUG] 请求设备列表: " + devicesUrl);
-
         Set<String> allDeviceSns = new HashSet<>();
         try (Response response = executeRequest(devicesUrl, apiKey, projectUuid)) {
             if (response.isSuccessful() && response.body() != null) {
@@ -88,41 +89,30 @@ public class DjiServiceImpl implements DjiService {
                 JsonNode listNode = root.path("data").path("list");
                 if (listNode != null && listNode.isArray()) {
                     for (JsonNode deviceNode : listNode) {
-                        // 1. 尝试获取无人的机 SN (Drone)
                         JsonNode droneNode = deviceNode.path("drone");
                         if (!droneNode.isMissingNode() && droneNode.has("sn")) {
-                            String sn = droneNode.get("sn").asText();
-                            String name = droneNode.path("device_model").path("name").asText("未知飞机");
-                            System.out.println("       🚁 发现飞机: " + name + " [SN: " + sn + "]");
-                            allDeviceSns.add(sn);
+                            allDeviceSns.add(droneNode.get("sn").asText());
                         }
-
-                        // 2. 尝试获取机场的 SN (Gateway/Dock) - ✅ 关键修正！
                         JsonNode gatewayNode = deviceNode.path("gateway");
                         if (!gatewayNode.isMissingNode() && gatewayNode.has("sn")) {
-                            String sn = gatewayNode.get("sn").asText();
-                            String name = gatewayNode.path("device_model").path("name").asText("未知机场");
-                            System.out.println("       🏠 发现机场: " + name + " [SN: " + sn + "]");
-                            allDeviceSns.add(sn);
+                            allDeviceSns.add(gatewayNode.get("sn").asText());
                         }
                     }
                 }
-            } else {
-                 System.err.println("    [ERROR] 获取设备失败. HTTP Code: " + response.code());
             }
         } catch (Exception e) {
-             System.err.println("    [EXCEPTION] 获取设备异常: " + e.getMessage());
+             e.printStackTrace();
         }
 
-        if (allDeviceSns.isEmpty()) {
-            System.out.println("    ⚠️ 未发现任何设备SN，流程终止。");
-            return Collections.emptyList();
-        }
+        if (allDeviceSns.isEmpty()) return Collections.emptyList();
 
-        // --- 第二步：查询任务 ---
+        // 2. 查询任务
         long now = System.currentTimeMillis() / 1000;
         long endTime = now + 24 * 60 * 60;
         long startTime = now - 90 * 24 * 60 * 60;
+
+        // 准备时间格式化器：将 UTC 转换为 北京时间格式 (yyyy-MM-dd HH_mm_ss)
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH_mm_ss");
 
         for (String sn : allDeviceSns) {
             String taskListUrl = djiApiBaseUrl + "/openapi/v0.1/flight-task/list" +
@@ -131,57 +121,60 @@ public class DjiServiceImpl implements DjiService {
                     "&end_at=" + endTime +
                     "&sn=" + sn;
 
-            System.out.println("    --------------------------------------------------");
-            System.out.println("    [DEBUG] 查询设备 [" + sn + "] 的任务...");
-
             try (Response response = executeRequest(taskListUrl, apiKey, projectUuid)) {
-                if (response.body() != null) {
+                if (response.isSuccessful() && response.body() != null) {
                     String json = response.body().string();
-                    // 打印 RAW JSON 以便确认
-                    // System.out.println("    [RAW_JSON] " + json);
+                    JsonNode root = objectMapper.readTree(json);
+                    JsonNode listNode = root.path("data").path("list");
 
-                    if (response.isSuccessful()) {
-                        JsonNode root = objectMapper.readTree(json);
-                        JsonNode listNode = root.path("data").path("list");
+                    if (listNode != null && listNode.isArray()) {
+                        List<DjiTaskDto> tasks = objectMapper.convertValue(listNode, new TypeReference<List<DjiTaskDto>>() {});
 
-                        if (listNode != null && listNode.isArray()) {
-                            List<DjiTaskDto> tasks = objectMapper.convertValue(listNode, new TypeReference<List<DjiTaskDto>>() {});
-                            System.out.println("    📄 找到 " + tasks.size() + " 个任务");
+                        for (DjiTaskDto task : tasks) {
+                            boolean nameMatched = folderNameKeyword == null || (task.getName() != null && task.getName().contains(folderNameKeyword));
+                            boolean statusMatched = !"failed".equalsIgnoreCase(task.getStatus());
 
-                            for (DjiTaskDto task : tasks) {
-                                boolean nameMatched = folderNameKeyword == null || (task.getName() != null && task.getName().contains(folderNameKeyword));
-                                boolean statusMatched = !"failed".equalsIgnoreCase(task.getStatus());
+                            if (nameMatched && statusMatched) {
+                                // 获取媒体文件
+                                String mediaUrl = djiApiBaseUrl + "/openapi/v0.1/flight-task/" + task.getUuid() + "/media";
+                                try (Response mediaResp = executeRequest(mediaUrl, apiKey, projectUuid)) {
+                                    if (mediaResp.isSuccessful() && mediaResp.body() != null) {
+                                        String mediaJson = mediaResp.body().string();
+                                        JsonNode mediaRoot = objectMapper.readTree(mediaJson);
+                                        JsonNode mediaList = mediaRoot.path("data").path("list");
 
-                                System.out.print("       > 检查 [" + task.getName() + "] (" + task.getStatus() + ")");
+                                        if (mediaList != null && mediaList.isArray()) {
+                                            List<DjiMediaFileDto> files = objectMapper.convertValue(mediaList, new TypeReference<List<DjiMediaFileDto>>() {});
 
-                                if (nameMatched && statusMatched) {
-                                    System.out.println(" -> ✅ 命中! 下载中...");
-                                    String mediaUrl = djiApiBaseUrl + "/openapi/v0.1/flight-task/" + task.getUuid() + "/media";
-                                    try (Response mediaResp = executeRequest(mediaUrl, apiKey, projectUuid)) {
-                                        if (mediaResp.isSuccessful() && mediaResp.body() != null) {
-                                            String mediaJson = mediaResp.body().string();
-                                            JsonNode mediaRoot = objectMapper.readTree(mediaJson);
-                                            JsonNode mediaList = mediaRoot.path("data").path("list");
-                                            if (mediaList != null && mediaList.isArray()) {
-                                                List<DjiMediaFileDto> files = objectMapper.convertValue(mediaList, new TypeReference<List<DjiMediaFileDto>>() {});
-
-                                                System.out.println("         📸 发现 " + files.size() + " 张照片");
-
-                                                String safeTime = (task.getBeginAt() != null) ? task.getBeginAt().replaceAll("[: ]", "-") : "unknown";
-                                                String virtualPath = "/" + folderNameKeyword + "/" + task.getName() + "_" + safeTime;
-                                                for (DjiMediaFileDto f : files) {
-                                                    f.setFilePath(virtualPath);
-                                                    resultList.add(f);
+                                            // ✅ 核心修正：构造与本地SD卡一致的文件夹名称
+                                            // 1. 解析 UTC 时间
+                                            String beginAt = task.getBeginAt(); // 2025-12-12T05:29:02...Z
+                                            String safeTimeStr;
+                                            try {
+                                                if (beginAt != null) {
+                                                    ZonedDateTime utcTime = ZonedDateTime.parse(beginAt);
+                                                    // 2. 转换为北京时间 (Asia/Shanghai)
+                                                    ZonedDateTime cstTime = utcTime.withZoneSameInstant(ZoneId.of("Asia/Shanghai"));
+                                                    // 3. 格式化为 "2025-12-12 13_29_02"
+                                                    safeTimeStr = cstTime.format(formatter) + " (UTC+08)";
+                                                } else {
+                                                    safeTimeStr = "unknown-time";
                                                 }
+                                            } catch (Exception ex) {
+                                                safeTimeStr = beginAt.replaceAll("[: ]", "-"); // 兜底
+                                            }
+
+                                            // 最终路径: /激光测距/激光测距 2025-12-12 13_29_02 (UTC+08)
+                                            String virtualPath = "/" + folderNameKeyword + "/" + task.getName() + " " + safeTimeStr;
+
+                                            for (DjiMediaFileDto f : files) {
+                                                f.setFilePath(virtualPath);
+                                                resultList.add(f);
                                             }
                                         }
                                     }
-                                } else {
-                                    System.out.println(" -> 跳过");
                                 }
                             }
-                        } else {
-                             System.out.println("    ⚠️ 无任务 (list=null/empty)");
                         }
                     }
                 }
@@ -189,7 +182,6 @@ public class DjiServiceImpl implements DjiService {
                 e.printStackTrace();
             }
         }
-
         return resultList;
     }
 

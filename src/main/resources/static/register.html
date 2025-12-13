@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>西马路项目 - 用户注册</title>
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <style>
+        body { margin: 0; background: #2d3a4b; height: 100vh; display: flex; justify-content: center; align-items: center; }
+        .register-card { width: 450px; padding: 30px; background: #fff; border-radius: 6px; }
+        .title { text-align: center; font-size: 22px; margin-bottom: 25px; color: #333; font-weight: bold;}
+        .captcha-row { display: flex; gap: 10px; }
+        .login-link { text-align: right; margin-top: 10px; font-size: 14px; }
+        .login-link a { color: #409EFF; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="register-card">
+            <div class="title">🚀 新用户注册</div>
+            <el-form :model="form" :rules="rules" ref="regForm" label-width="80px">
+
+                <el-form-item label="用户名" prop="username">
+                    <el-input v-model="form.username" placeholder="请输入用户名"></el-input>
+                </el-form-item>
+
+                <el-form-item label="密码" prop="password">
+                    <el-input v-model="form.password" type="password" placeholder="设置密码"></el-input>
+                </el-form-item>
+
+                <el-form-item label="手机号" prop="phone">
+                    <el-input v-model="form.phone" placeholder="用于接收紧急通知"></el-input>
+                </el-form-item>
+
+                <el-form-item label="邮箱" prop="email">
+                    <el-input v-model="form.email" placeholder="用于接收验证码"></el-input>
+                </el-form-item>
+
+                <el-form-item label="验证码" prop="code">
+                    <div class="captcha-row">
+                        <el-input v-model="form.code" placeholder="6位数字"></el-input>
+                        <el-button type="primary" :disabled="timer > 0" @click="sendCode">
+                            {{ timer > 0 ? timer + 's后重发' : '获取验证码' }}
+                        </el-button>
+                    </div>
+                </el-form-item>
+
+                <el-form-item>
+                    <el-button type="primary" style="width: 100%" @click="doRegister" :loading="loading">立即注册</el-button>
+                </el-form-item>
+            </el-form>
+            <div class="login-link">
+                已有账号？<a href="login.html">去登录</a>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/vue@2/dist/vue.js"></script>
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+
+    <script>
+        new Vue({
+            el: '#app',
+            data: {
+                loading: false,
+                timer: 0,
+                form: {
+                    username: '',
+                    password: '',
+                    phone: '',
+                    email: '',
+                    code: ''
+                },
+                rules: {
+                    username: [{ required: true, message: '必填', trigger: 'blur' }],
+                    password: [{ required: true, message: '必填', trigger: 'blur' }],
+                    email: [
+                        { required: true, message: '必填', trigger: 'blur' },
+                        { type: 'email', message: '邮箱格式不对', trigger: 'blur' }
+                    ],
+                    code: [{ required: true, message: '请输入验证码', trigger: 'blur' }]
+                }
+            },
+            methods: {
+                // 发送验证码
+                sendCode() {
+                    // 先只校验邮箱这一项
+                    this.$refs.regForm.validateField('email', (err) => {
+                        if (!err) {
+                            axios.post('/api/auth/send-code?email=' + this.form.email)
+                                .then(res => {
+                                    if (res.data.code === 200) {
+                                        this.$message.success('验证码已发送，请查看后台控制台！');
+                                        this.startTimer();
+                                    } else {
+                                        this.$message.error(res.data.message);
+                                    }
+                                });
+                        }
+                    });
+                },
+                // 倒计时逻辑
+                startTimer() {
+                    this.timer = 60;
+                    const interval = setInterval(() => {
+                        this.timer--;
+                        if (this.timer <= 0) clearInterval(interval);
+                    }, 1000);
+                },
+                // 提交注册
+                doRegister() {
+                    this.$refs.regForm.validate((valid) => {
+                        if (valid) {
+                            this.loading = true;
+                            axios.post('/api/auth/register', this.form)
+                                .then(res => {
+                                    if (res.data.code === 200) {
+                                        this.$message.success('注册成功！');
+                                        setTimeout(() => window.location.href = 'login.html', 1500);
+                                    } else {
+                                        this.$message.error(res.data.message);
+                                    }
+                                })
+                                .finally(() => this.loading = false);
+                        }
+                    });
+                }
+            }
+        });
+    </script>
+</body>
+</html>

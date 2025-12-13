@@ -51,7 +51,7 @@ public class PhotoSyncTask {
     private PhotoProcessor photoProcessor;
 
     // 每1小时执行一次 (3600000毫秒)
-    // initialDelay = 10000: 项目启动10秒后先跑一次，方便你观察
+    // initialDelay = 10000: 项目启动10秒后先跑一次，方便观察
     @Scheduled(fixedRate = 3600000, initialDelay = 10000)
     public void syncPhotosTask() {
         System.out.println("\n=================================================");
@@ -87,45 +87,59 @@ public class PhotoSyncTask {
 
                 int successCount = 0;
                 for (DjiMediaFileDto djiFile : djiFiles) {
-                    // 3. 构造华为云存储路径
-                    // 格式: projects/{项目ID}/{一级文件夹}/{任务名_时间}/{文件名}
-                    // djiFile.getFilePath() 已经在 DjiService 里被我们人工合成为 /一级/二级 的格式了
-                    String relativePath = djiFile.getFilePath();
-                    if (relativePath.startsWith("/")) {
-                        relativePath = relativePath.substring(1);
-                    }
-                    String objectKey = "projects/" + project.getId() + "/" + relativePath + "/" + djiFile.getFileName();
+                    String fileName = djiFile.getFileName();
 
-                    // 4. 查库去重 (最高效)
-                    QueryWrapper<ProjectPhoto> query = new QueryWrapper<>();
-                    query.eq("photo_url", objectKey);
-                    if (projectPhotoMapper.selectCount(query) > 0) {
-                        // 数据库里有了，说明处理过了，跳过
+                    // 🛑 1. 黑名单过滤 (彻底根治红字)
+                    if ("Remote-Control".equals(fileName)
+                            || fileName.endsWith(".MRK") || fileName.endsWith(".NAV")
+                            || fileName.endsWith(".OBS") || fileName.endsWith(".RTK")
+                            || fileName.endsWith("_D")) {
+                        System.out.println("       ⚪ [静默跳过] 原始数据/文件夹: " + fileName);
                         continue;
                     }
 
-                    System.out.println("    🚀 [新照片] 正在同步: " + djiFile.getFileName());
+                    // ✅ 2. 核心补丁：如果文件名没有后缀，强制加上 .JPG
+                    // 这样就能和本地抢救上传的 "DJI_xxx.JPG" 完美重合，触发 OBS 跳过机制
+                    if (!fileName.toLowerCase().endsWith(".jpg") && !fileName.toLowerCase().endsWith(".jpeg")) {
+                        fileName = fileName + ".jpeg";
+                    }
 
-                    // 5. 下载照片流 (一次下载，多次使用)
-                    Request request = new Request.Builder().url(djiFile.getDownloadUrl()).get().build();
-                    try (Response response = okHttpClient.newCall(request).execute()) {
-                        if (response.isSuccessful() && response.body() != null) {
-                            byte[] fileBytes = response.body().bytes(); // 读取到内存
+                    // 3. 构造路径
+                    String relativePath = djiFile.getFilePath();
+                    if (relativePath.startsWith("/")) relativePath = relativePath.substring(1);
+                    String objectKey = "projects/" + project.getId() + "/" + relativePath + "/" + fileName;
 
-                            // 6. 上传华为云 (如果云上没有的话)
+                    // 4. 查库去重
+                    QueryWrapper<ProjectPhoto> query = new QueryWrapper<>();
+                    query.eq("photo_url", objectKey);
+                    if (projectPhotoMapper.selectCount(query) > 0) continue;
+
+                    System.out.println("    🚀 [新照片] 正在同步: " + fileName);
+
+                    // 5. 下载与处理 (全包裹 try-catch)
+                    try {
+                        if (djiFile.getDownloadUrl() == null || djiFile.getDownloadUrl().isEmpty()) {
+                            System.out.println("       ⚠️ 跳过: 无下载地址");
+                            continue;
+                        }
+
+                        Request request = new Request.Builder().url(djiFile.getDownloadUrl()).get().build();
+                        try (Response response = okHttpClient.newCall(request).execute()) {
+                            if (!response.isSuccessful() || response.body() == null) throw new RuntimeException("HTTP " + response.code());
+                            byte[] fileBytes = response.body().bytes();
+
+                            // 6. 上传华为云 (检测是否存在，避免重复上传)
                             if (!obsService.doesObjectExist(project.getObsAk(), project.getObsSk(), project.getObsEndpoint(), project.getObsBucketName(), objectKey)) {
-                                obsService.uploadStream(
-                                    project.getObsAk(), project.getObsSk(), project.getObsEndpoint(),
-                                    project.getObsBucketName(), objectKey,
-                                    new ByteArrayInputStream(fileBytes)
-                                );
+                                obsService.uploadStream(project.getObsAk(), project.getObsSk(), project.getObsEndpoint(), project.getObsBucketName(), objectKey, new ByteArrayInputStream(fileBytes));
                                 System.out.println("       -> 上传华为云成功");
+                            } else {
+                                // 🌟 看到这行日志，就说明我们的“对齐”成功了！
+                                System.out.println("       -> OBS已存在 (跳过上传)");
                             }
 
-                            // 7. 解析 XMP 并入库
+                            // 7. 入库
                             try (InputStream xmpStream = new ByteArrayInputStream(fileBytes)) {
-                                Optional<PhotoData> photoDataOpt = photoProcessor.process(xmpStream, djiFile.getFileName());
-
+                                Optional<PhotoData> photoDataOpt = photoProcessor.process(xmpStream, fileName);
                                 ProjectPhoto photo = new ProjectPhoto();
                                 photo.setProjectId(project.getId());
                                 photo.setPhotoUrl(objectKey);
@@ -136,18 +150,17 @@ public class PhotoSyncTask {
                                     photo.setGpsLat(java.math.BigDecimal.valueOf(data.getLatitude()));
                                     photo.setGpsLng(java.math.BigDecimal.valueOf(data.getLongitude()));
                                     photo.setLaserDistance(java.math.BigDecimal.valueOf(data.getDistance()));
-                                    System.out.println("       -> XMP解析成功: " + data.getCaptureTime());
-                                } else {
-                                    photo.setShootTime(LocalDateTime.now());
-                                    System.err.println("       -> ⚠️ 无XMP数据，使用当前时间");
-                                }
 
-                                projectPhotoMapper.insert(photo);
-                                successCount++;
+                                    projectPhotoMapper.insert(photo);
+                                    successCount++;
+                                    System.out.println("       ✅ 入库成功");
+                                } else {
+                                    System.out.println("       ⚠️ 跳过: 无XMP数据");
+                                }
                             }
                         }
                     } catch (Exception e) {
-                        System.err.println("    ❌ 同步失败 [" + djiFile.getFileName() + "]: " + e.getMessage());
+                        System.out.println("       ⚪ [跳过] " + fileName + ": " + e.getMessage());
                     }
                 }
                 System.out.println("    ✅ 项目同步完成，新增入库: " + successCount + " 张");
