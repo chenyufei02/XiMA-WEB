@@ -4,80 +4,142 @@
     <meta charset="UTF-8">
     <title>定义电子围栏 - 拐点选择法</title>
     <style>
-        body { display: flex; height: 100vh; margin: 0; font-family: sans-serif; }
+        body { display: flex; height: 100vh; margin: 0; font-family: 'Segoe UI', sans-serif; }
+
         /* 左侧：照片选择区 */
-        .sidebar { width: 300px; border-right: 1px solid #ccc; padding: 10px; overflow-y: auto; background: #f9f9f9; }
-        .photo-item { display: flex; align-items: center; padding: 8px; border-bottom: 1px solid #eee; cursor: pointer; }
-        .photo-item:hover { background: #eef; }
-        .photo-item img { width: 50px; height: 50px; object-fit: cover; margin-right: 10px; border-radius: 4px; }
-        .photo-info { font-size: 12px; }
+        .sidebar { width: 320px; border-right: 1px solid #ddd; display: flex; flex-direction: column; background: #f8f9fa; }
+        .sidebar-header { padding: 15px; border-bottom: 1px solid #ddd; background: #fff; }
+        .sidebar-title { margin: 0 0 10px 0; font-size: 16px; color: #333; font-weight: 600; }
+
+        #photo-list { flex: 1; overflow-y: auto; padding: 10px; }
+        .photo-item { display: flex; align-items: center; padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; background: #fff; border-radius: 4px; margin-bottom: 8px; transition: all 0.2s; }
+        .photo-item:hover { background: #e6f7ff; border-color: #1890ff; }
+        .photo-item img { width: 60px; height: 60px; object-fit: cover; margin-right: 12px; border-radius: 4px; border: 1px solid #eee; }
+        .photo-info { font-size: 12px; color: #666; }
+        .photo-name { font-weight: bold; color: #333; margin-bottom: 4px; display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; width: 180px; }
 
         /* 右侧：画布区 */
         .main { flex: 1; position: relative; background: #fff; display: flex; flex-direction: column; }
-        #canvas-container { flex: 1; position: relative; border: 2px dashed #ddd; margin: 20px; border-radius: 8px; }
 
-        /* 画布上的点 */
+        .toolbar { padding: 12px 20px; background: #fff; border-bottom: 1px solid #ddd; display: flex; gap: 15px; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.05); z-index: 100; }
+        .input-group { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+        input[type="text"], input[type="number"] { padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; outline: none; }
+        input:focus { border-color: #1890ff; }
+
+        .btn { padding: 6px 15px; border-radius: 4px; cursor: pointer; border: none; font-size: 14px; transition: background 0.3s; }
+        .btn-primary { background: #1890ff; color: white; }
+        .btn-primary:hover { background: #40a9ff; }
+        .btn-danger { background: #ff4d4f; color: white; }
+        .btn-danger:hover { background: #ff7875; }
+        .btn-success { background: #52c41a; color: white; }
+        .btn-success:hover { background: #73d13d; }
+
+        #canvas-container { flex: 1; position: relative; margin: 20px; background: #f0f2f5; border: 1px solid #e8e8e8; border-radius: 4px; overflow: hidden; }
+
+        /* 画布元素 */
         .point-marker {
-            position: absolute; width: 14px; height: 14px; background: red; border-radius: 50%;
-            transform: translate(-50%, -50%); cursor: pointer; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-            display: flex; align-items: center; justify-content: center; color: white; font-size: 10px;
+            position: absolute; width: 16px; height: 16px; background: #ff4d4f; border-radius: 50%;
+            transform: translate(-50%, -50%); cursor: pointer; border: 2px solid white;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3); z-index: 10;
+            display: flex; align-items: center; justify-content: center; color: white; font-size: 10px; font-weight: bold;
         }
-        .point-marker.selected { background: blue; z-index: 10; }
+        .point-marker:hover { transform: translate(-50%, -50%) scale(1.2); }
 
-        .toolbar { padding: 10px 20px; background: #eee; display: flex; gap: 10px; align-items: center; }
+        /* 提示层 */
+        .empty-tip { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: #999; pointer-events: none; }
     </style>
 </head>
 <body>
 
 <div class="sidebar">
-    <h3>📸 1. 选择拐角照片</h3>
-    <p style="font-size:12px; color:#666;">请勾选代表建筑物边缘拐角的照片（至少3张）</p>
+    <div class="sidebar-header">
+        <h3 class="sidebar-title">📸 1. 选择拐角照片</h3>
+        <p style="font-size:12px; color:#999; margin:0;">请勾选代表建筑物顶层拐角的照片</p>
+    </div>
     <div id="photo-list">
-        <p>加载中...</p>
+        <div style="text-align:center; margin-top:20px; color:#999;">请先点击"刷新照片"</div>
     </div>
 </div>
 
 <div class="main">
     <div class="toolbar">
-        <span>当前项目ID: <input type="number" id="projectIdInput" value="1" style="width:50px"></span>
-        <button onclick="loadPhotos()">🔄 刷新照片</button>
+        <div class="input-group">
+            <label>项目ID:</label>
+            <input type="number" id="projectIdInput" value="1" style="width:60px">
+        </div>
+        <button class="btn btn-primary" onclick="initPage()">🔄 刷新数据</button>
+
+        <div style="width: 1px; height: 20px; background: #ddd; margin: 0 10px;"></div>
+
+        <div class="input-group">
+            <label>🏠 楼栋名称:</label>
+            <input type="text" id="buildingNameInput" placeholder="例如: 1号楼" style="width:150px">
+        </div>
+
         <div style="flex:1"></div>
-        <button onclick="clearCanvas()">🗑️ 重置画布</button>
-        <button onclick="saveBoundary()" style="background: green; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer;">💾 保存围栏</button>
+
+        <button class="btn btn-danger" onclick="resetSelection()">🗑️ 重置画布</button>
+        <button class="btn btn-success" onclick="saveBoundary()">💾 保存该楼栋围栏</button>
     </div>
 
     <div id="canvas-container">
-        <p style="position:absolute; top:45%; left:0; width:100%; text-align:center; color:#ccc; pointer-events: none;">
-            选中左侧照片后，此处将自动根据GPS生成相对位置图。<br>
-            请按顺时针点击红点进行连线。
-        </p>
-        <svg id="svg-layer" style="width:100%; height:100%; position:absolute; top:0; left:0; pointer-events: none;"></svg>
+        <div class="empty-tip">
+            <h3>👈 请在左侧勾选照片</h3>
+            <p>系统将自动根据经纬度生成相对位置图</p>
+        </div>
+        <svg id="svg-layer" style="width:100%; height:100%; position:absolute; top:0; left:0; pointer-events: none; z-index: 5;"></svg>
+        <svg id="svg-existing-layer" style="width:100%; height:100%; position:absolute; top:0; left:0; pointer-events: none; z-index: 1;"></svg>
     </div>
 </div>
 
 <script>
     let allPhotos = [];
-    let selectedPhotos = []; // 存 {lat, lng, id}
+    let selectedPhotos = []; // 当前选中的点: {lat, lng, id, screenX, screenY}
+    let existingBuildings = []; // 已存在的楼栋数据
 
-    // 1. 加载照片
+    // 初始化
+    function initPage() {
+        loadPhotos();
+        loadExistingBuildings();
+    }
+
+    // 1. 加载照片 (保持原有逻辑，增加容错)
     async function loadPhotos() {
         const projectId = document.getElementById('projectIdInput').value;
         const listDiv = document.getElementById('photo-list');
-        listDiv.innerHTML = '加载中...';
+        listDiv.innerHTML = '<p style="padding:10px; text-align:center">加载中...</p>';
 
         try {
             const res = await fetch(`/api/projects/${projectId}/photos`);
             const json = await res.json();
 
-            if (json.code === 200 && json.data) {
+            if (json.status === 200 && json.data) {
                 allPhotos = json.data;
                 renderPhotoList(json.data);
             } else {
-                listDiv.innerHTML = '加载失败: ' + (json.message || '未知错误');
+                listDiv.innerHTML = `<p style="padding:10px; color:red">加载失败: ${json.message}</p>`;
             }
         } catch (e) {
             console.error(e);
-            listDiv.innerHTML = '网络请求错误，请检查控制台';
+            listDiv.innerHTML = '<p style="padding:10px; color:red">网络请求错误</p>';
+        }
+    }
+
+    // ✅ 2. 加载已存在的楼栋 (新增)
+    async function loadExistingBuildings() {
+        const projectId = document.getElementById('projectIdInput').value;
+        try {
+            // 调用我们刚写的 BuildingController
+            const res = await fetch(`/api/buildings/list?projectId=${projectId}`);
+            const json = await res.json();
+            if (json.status === 200) {
+                existingBuildings = json.data;
+                console.log("已加载楼栋:", existingBuildings);
+                // 如果当前画布有坐标系，立即重绘已有楼栋
+                if (selectedPhotos.length > 0) drawCanvas();
+            }
+        } catch (e) {
+            console.error("加载楼栋失败", e);
         }
     }
 
@@ -86,32 +148,32 @@
         listDiv.innerHTML = '';
 
         if (photos.length === 0) {
-            listDiv.innerHTML = '没有找到照片，请检查关键字设置。';
+            listDiv.innerHTML = '<p style="padding:10px">没有找到照片，请检查关键字设置。</p>';
             return;
         }
 
         photos.forEach(p => {
-            // 模拟 GPS 数据 (因为API列表可能不返回GPS，实际项目可能需要单独查详情)
-            // TODO: 正式上线时，这里必须从 p.metadata 中获取真实 lat/lng
-            // 为了演示效果，我这里先随机生成一下，等你确认接口能返回GPS我们再改
-            const mockLat = 30.5 + Math.random() * 0.001;
-            const mockLng = 114.3 + Math.random() * 0.001;
+            // ⚠️ 临时模拟坐标: 实际应从后端 p.gpsLat / p.gpsLng 获取
+            // 这里假设后端 DjiMediaFileDto 还没透出 GPS，暂时 mock，正式联调请换成 p.gpsLat
+            const mockLat = 30.594 + Math.random() * 0.001;
+            const mockLng = 114.281 + Math.random() * 0.001;
 
             const div = document.createElement('div');
             div.className = 'photo-item';
             div.innerHTML = `
-                <input type="checkbox" style="margin-right:10px" onchange="togglePhoto('${p.file_id}', ${mockLat}, ${mockLng}, this)">
-                <img src="${p.url || '#'}" alt="图">
+                <input type="checkbox" style="margin-right:10px; transform:scale(1.2);"
+                       onchange="togglePhoto('${p.name}', ${mockLat}, ${mockLng}, this)">
+                <img src="${p.downloadUrl || '#'}" onerror="this.src='https://via.placeholder.com/60?text=No+Img'">
                 <div class="photo-info">
-                    <div>${p.name}</div>
-                    <div style="color:#999; font-size:10px;">${mockLat.toFixed(5)}, ${mockLng.toFixed(5)}</div>
+                    <span class="photo-name" title="${p.name}">${p.name}</span>
+                    <div>📍 ${mockLat.toFixed(6)}, ${mockLng.toFixed(6)}</div>
                 </div>
             `;
             listDiv.appendChild(div);
         });
     }
 
-    // 2. 勾选/取消照片 -> 更新画布
+    // 3. 勾选/取消 -> 更新数据
     function togglePhoto(id, lat, lng, checkbox) {
         if (checkbox.checked) {
             selectedPhotos.push({id, lat, lng});
@@ -121,90 +183,178 @@
         drawCanvas();
     }
 
-    // 3. 核心算法：把 GPS 映射到 DIV 画布上
+    function resetSelection() {
+        selectedPhotos = [];
+        document.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+        drawCanvas();
+    }
+
+    // 4. 核心绘图算法 (包含已有楼栋的回显)
     function drawCanvas() {
         const container = document.getElementById('canvas-container');
-        // 清空旧点
+        // 清除当前的点
         document.querySelectorAll('.point-marker').forEach(e => e.remove());
+        const svgLayer = document.getElementById('svg-layer');
+        const existingLayer = document.getElementById('svg-existing-layer');
 
-        if (selectedPhotos.length === 0) return;
+        svgLayer.innerHTML = '';
+        existingLayer.innerHTML = '';
 
-        // 找出经纬度的最大最小值，确定缩放比例
-        const lats = selectedPhotos.map(p => p.lat);
-        const lngs = selectedPhotos.map(p => p.lng);
-        const minLat = Math.min(...lats), maxLat = Math.max(...lats);
-        const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+        if (selectedPhotos.length === 0) {
+            document.querySelector('.empty-tip').style.display = 'block';
+            return;
+        }
+        document.querySelector('.empty-tip').style.display = 'none';
 
-        const latRange = maxLat - minLat || 0.0001; // 防止除以0
-        const lngRange = maxLng - minLng || 0.0001;
+        // --- 1. 确定坐标系范围 ---
+        // 我们需要把"当前选中的点"和"已存在的楼栋点"合在一起计算缩放比例，不然已存在的楼可能会画到画布外面去
+        let allLats = selectedPhotos.map(p => p.lat);
+        let allLngs = selectedPhotos.map(p => p.lng);
 
-        const width = container.clientWidth - 100; // 留白
-        const height = container.clientHeight - 100;
+        existingBuildings.forEach(b => {
+            if(b.boundaryCoords) {
+                try {
+                    const coords = JSON.parse(b.boundaryCoords);
+                    coords.forEach(c => {
+                        allLats.push(c.lat);
+                        allLngs.push(c.lng);
+                    });
+                } catch(e){}
+            }
+        });
 
+        const minLat = Math.min(...allLats), maxLat = Math.max(...allLats);
+        const minLng = Math.min(...allLngs), maxLng = Math.max(...allLngs);
+
+        // 增加一点边距 (padding)
+        const latPad = (maxLat - minLat) * 0.1 || 0.0001;
+        const lngPad = (maxLng - minLng) * 0.1 || 0.0001;
+
+        const viewMinLat = minLat - latPad;
+        const viewMaxLat = maxLat + latPad;
+        const viewMinLng = minLng - lngPad;
+        const viewMaxLng = maxLng + lngPad;
+
+        const latRange = viewMaxLat - viewMinLat;
+        const lngRange = viewMaxLng - viewMinLng;
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+
+        // 坐标转换函数
+        const toScreen = (lat, lng) => {
+            const x = ((lng - viewMinLng) / lngRange) * width;
+            // 纬度越大越靠上(y越小)
+            const y = height - ((lat - viewMinLat) / latRange) * height;
+            return {x, y};
+        };
+
+        // --- 2. 绘制已存在的楼栋 (绿色背景) ---
+        existingBuildings.forEach(b => {
+            if(b.boundaryCoords) {
+                try {
+                    const coords = JSON.parse(b.boundaryCoords);
+                    if(coords.length > 0) {
+                        const pointsStr = coords.map(c => {
+                            const p = toScreen(c.lat, c.lng);
+                            return `${p.x},${p.y}`;
+                        }).join(' ');
+
+                        // 创建多边形
+                        const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+                        polygon.setAttribute("points", pointsStr);
+                        polygon.setAttribute("style", "fill:rgba(82, 196, 26, 0.2); stroke:#52c41a; stroke-width:2; stroke-dasharray:5,5;");
+                        existingLayer.appendChild(polygon);
+
+                        // 绘制文字标签 (取第一个点)
+                        const firstP = toScreen(coords[0].lat, coords[0].lng);
+                        const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                        text.setAttribute("x", firstP.x);
+                        text.setAttribute("y", firstP.y - 10);
+                        text.setAttribute("fill", "#52c41a");
+                        text.setAttribute("font-size", "12");
+                        text.textContent = b.name; // 显示楼名
+                        existingLayer.appendChild(text);
+                    }
+                } catch(e){}
+            }
+        });
+
+        // --- 3. 绘制当前正在编辑的点和线 (红色) ---
         selectedPhotos.forEach((p, index) => {
-            // 归一化坐标 (0.0 ~ 1.0) -> 像素坐标
-            // 注意：纬度越大越靠上(y越小)，所以 y 要反过来
-            const x = ((p.lng - minLng) / lngRange) * width + 50;
-            const y = height - ((p.lat - minLat) / latRange) * height + 50;
+            const screen = toScreen(p.lat, p.lng);
+            p.screenX = screen.x;
+            p.screenY = screen.y;
 
+            // 画点
             const dot = document.createElement('div');
             dot.className = 'point-marker';
-            dot.style.left = x + 'px';
-            dot.style.top = y + 'px';
+            dot.style.left = screen.x + 'px';
+            dot.style.top = screen.y + 'px';
             dot.innerText = index + 1;
-            dot.title = `Lat:${p.lat}, Lng:${p.lng}`;
-
-            // 存储计算后的像素坐标供连线用
-            p.screenX = x;
-            p.screenY = y;
-
             container.appendChild(dot);
         });
 
-        drawPolygon();
+        // 画线
+        if (selectedPhotos.length >= 2) {
+            const pointsStr = selectedPhotos.map(p => `${p.screenX},${p.screenY}`).join(' ');
+            const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+            polygon.setAttribute("points", pointsStr);
+            // 还没保存时，用红色半透明
+            polygon.setAttribute("style", "fill:rgba(255, 77, 79, 0.2); stroke:#ff4d4f; stroke-width:2");
+            svgLayer.appendChild(polygon);
+        }
     }
 
-    // 4. 画连线 (SVG)
-    function drawPolygon() {
-        const svg = document.getElementById('svg-layer');
-        if (selectedPhotos.length < 2) {
-            svg.innerHTML = '';
+    // 5. 保存围栏 (对接新接口)
+    async function saveBoundary() {
+        if (selectedPhotos.length < 3) {
+            alert("⚠️ 至少需要3个点才能构成一个围栏！");
             return;
         }
 
-        // 简单按勾选顺序连线 (实际可能需要用户点击排序，这里先演示闭合多边形)
-        let pointsStr = selectedPhotos.map(p => `${p.screenX},${p.screenY}`).join(' ');
-
-        svg.innerHTML = `
-            <polygon points="${pointsStr}" style="fill:rgba(0,0,255,0.1);stroke:blue;stroke-width:2" />
-        `;
-    }
-
-    // 5. 保存
-    async function saveBoundary() {
-        if (selectedPhotos.length < 3) {
-            alert("请至少选择3张照片构成一个面！");
+        const buildingName = document.getElementById('buildingNameInput').value.trim();
+        if (!buildingName) {
+            alert("⚠️ 请输入楼栋名称（例如：1号楼）");
+            document.getElementById('buildingNameInput').focus();
             return;
         }
 
         const projectId = document.getElementById('projectIdInput').value;
-        // 构造传给后端的数据：只传经纬度，不传屏幕坐标
         const coords = selectedPhotos.map(p => ({ lat: p.lat, lng: p.lng }));
 
+        const btn = document.querySelector('.btn-success');
+        const originalText = btn.innerText;
+        btn.innerText = "保存中...";
+        btn.disabled = true;
+
         try {
-            const res = await fetch(`/api/projects/${projectId}/boundary`, {
+            // ✅ 调用 BuildingController
+            const res = await fetch(`/api/buildings/boundary?projectId=${projectId}&buildingName=${buildingName}`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(coords)
             });
             const json = await res.json();
-            alert(json.message || '保存结果未知');
+
+            if (json.status === 200) {
+                alert("✅ " + json.message);
+                // 保存成功后，重新加载已有楼栋，看效果
+                loadExistingBuildings();
+                // 清空当前画布
+                resetSelection();
+            } else {
+                alert("❌ 保存失败: " + json.message);
+            }
         } catch (e) {
-            alert('保存失败');
+            console.error(e);
+            alert('❌ 网络请求失败');
+        } finally {
+            btn.innerText = originalText;
+            btn.disabled = false;
         }
     }
 
-    // 监听窗口大小变化重绘
+    // 窗口缩放重绘
     window.onresize = drawCanvas;
 </script>
 

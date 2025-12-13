@@ -23,6 +23,7 @@ public class WebConfig implements WebMvcConfigurer {
                 .excludePathPatterns(
                         "/api/auth/login",    // 排除登录接口
                         "/api/auth/register", // 排除注册接口
+                        "/api/auth/send-code", // 排除发送验证码接口
                         "/api/projects/dji-workspaces", // ✅ 新增：允许查询大疆项目（无需登录）
                         "/api/projects/import" ,         // ✅ 新增：允许导入项目（无需登录）
                         "/api/hello"          // 排除测试接口(可选)
