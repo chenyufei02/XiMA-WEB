@@ -133,7 +133,7 @@ public class PhotoSyncTask {
                                 obsService.uploadStream(project.getObsAk(), project.getObsSk(), project.getObsEndpoint(), project.getObsBucketName(), objectKey, new ByteArrayInputStream(fileBytes));
                                 System.out.println("       -> 上传华为云成功");
                             } else {
-                                // 🌟 看到这行日志，就说明我们的“对齐”成功了！
+                                // 🌟 看到这行日志，就说明对齐成功
                                 System.out.println("       -> OBS已存在 (跳过上传)");
                             }
 

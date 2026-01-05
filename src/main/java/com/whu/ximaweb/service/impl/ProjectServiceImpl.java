@@ -29,42 +29,64 @@ public class ProjectServiceImpl implements ProjectService {
     @Autowired
     private SysUserProjectMapper sysUserProjectMapper;
 
-    // 新增：需要操作楼栋表
     @Autowired
     private SysBuildingMapper sysBuildingMapper;
 
+    /**
+     * 导入项目（已修复重复导入报错的问题）
+     * 逻辑：如果项目已存在，则更新配置；如果不存在，则新建。
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void importProject(ProjectImportRequest request, Integer userId) {
-        // 1. 保存项目配置
-        SysProject project = new SysProject();
-        project.setProjectName(request.getProjectName());
-        project.setPhotoFolderKeyword(request.getPhotoFolderKeyword());
+        // 1. 检查该用户下是否已存在同名项目
+        QueryWrapper<SysProject> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("project_name", request.getProjectName());
+        queryWrapper.eq("created_by", userId);
+        SysProject existingProject = sysProjectMapper.selectOne(queryWrapper);
 
-        project.setDjiOrgKey(request.getDjiOrgKey());
-        project.setDjiProjectUuid(request.getDjiProjectUuid());
+        if (existingProject != null) {
+            // --- 情况A：项目已存在，更新配置 ---
+            existingProject.setPhotoFolderKeyword(request.getPhotoFolderKeyword());
+            existingProject.setDjiProjectUuid(request.getDjiProjectUuid());
+            existingProject.setDjiOrgKey(request.getDjiOrgKey());
+            existingProject.setObsBucketName(request.getObsBucketName());
+            existingProject.setObsAk(request.getObsAk());
+            existingProject.setObsSk(request.getObsSk());
+            existingProject.setObsEndpoint(request.getObsEndpoint());
+            // 更新修改时间等（可选）
+            sysProjectMapper.updateById(existingProject);
+        } else {
+            // --- 情况B：项目不存在，执行新建 ---
+            SysProject project = new SysProject();
+            project.setProjectName(request.getProjectName());
+            project.setPhotoFolderKeyword(request.getPhotoFolderKeyword());
+            project.setDjiProjectUuid(request.getDjiProjectUuid());
+            project.setDjiOrgKey(request.getDjiOrgKey());
+            project.setObsBucketName(request.getObsBucketName());
+            project.setObsAk(request.getObsAk());
+            project.setObsSk(request.getObsSk());
+            project.setObsEndpoint(request.getObsEndpoint());
 
-        project.setObsEndpoint(request.getObsEndpoint());
-        project.setObsBucketName(request.getObsBucketName());
-        project.setObsAk(request.getObsAk());
-        project.setObsSk(request.getObsSk());
+            project.setCreatedBy(userId);
+            project.setCreatedAt(LocalDateTime.now());
 
-        project.setCreatedBy(userId);
-        project.setCreatedAt(LocalDateTime.now());
+            sysProjectMapper.insert(project);
 
-        sysProjectMapper.insert(project);
-
-        // 2. 建立关联
-        SysUserProject relation = new SysUserProject();
-        relation.setUserId(userId);
-        relation.setProjectId(project.getId());
-
-        sysUserProjectMapper.insert(relation);
+            // 建立用户与项目的关联
+            SysUserProject relation = new SysUserProject();
+            relation.setUserId(userId);
+            relation.setProjectId(project.getId());
+            sysUserProjectMapper.insert(relation);
+        }
     }
 
+    /**
+     * 获取用户的所有项目（保留原有功能）
+     */
     @Override
     public List<SysProject> getUserProjects(Integer userId) {
-        // 1. 查关联
+        // 1. 查关联表
         QueryWrapper<SysUserProject> query = new QueryWrapper<>();
         query.eq("user_id", userId);
         List<SysUserProject> relations = sysUserProjectMapper.selectList(query);
@@ -77,14 +99,12 @@ public class ProjectServiceImpl implements ProjectService {
                 .map(SysUserProject::getProjectId)
                 .collect(Collectors.toList());
 
-        // 2. 查详情
+        // 2. 查项目详情
         return sysProjectMapper.selectBatchIds(projectIds);
     }
 
     /**
-     * 更新项目的电子围栏 (修正版)
-     * 逻辑变更：围栏现在属于"楼栋"。
-     * 兼容策略：如果前端没传楼栋ID，默认操作该项目下的"默认教学楼"。
+     * 更新项目的电子围栏（保留原有功能）
      */
     public void updateBoundary(Integer projectId, java.util.List<com.whu.ximaweb.dto.Coordinate> coords) {
         // 1. 检查项目是否存在
@@ -99,7 +119,6 @@ public class ProjectServiceImpl implements ProjectService {
             // 2. 查找该项目下是否已有楼栋
             QueryWrapper<SysBuilding> query = new QueryWrapper<>();
             query.eq("project_id", projectId);
-            // 只要第一条
             query.last("LIMIT 1");
             SysBuilding building = sysBuildingMapper.selectOne(query);
 
@@ -107,16 +126,14 @@ public class ProjectServiceImpl implements ProjectService {
                 // 如果没有，自动创建一个默认楼栋
                 building = new SysBuilding();
                 building.setProjectId(projectId);
-                building.setName("默认教学楼"); // 默认名
+                building.setName("默认教学楼");
                 building.setBoundaryCoords(jsonCoords);
                 building.setCreatedAt(LocalDateTime.now());
                 sysBuildingMapper.insert(building);
-                System.out.println("已为项目 [" + projectId + "] 创建默认楼栋并设置围栏");
             } else {
                 // 如果有，更新它
                 building.setBoundaryCoords(jsonCoords);
                 sysBuildingMapper.updateById(building);
-                System.out.println("已更新楼栋 [" + building.getName() + "] 的围栏");
             }
 
         } catch (Exception e) {

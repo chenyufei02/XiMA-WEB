@@ -58,7 +58,9 @@
                     // 发送登录请求
                     axios.post(`/api/auth/login?username=${this.form.username}&password=${this.form.password}`)
                         .then(res => {
-                            if (res.data.code === 200) {
+                            console.log("👉 后端返回的数据:", res.data);
+                            console.log("👉 我正在检查的字段是:", res.data.status);
+                            if (res.data.status === 200) {
                                 this.$message.success('登录成功，正在跳转...');
                                 // 1. 保存 Token 到本地
                                 localStorage.setItem('token', res.data.data.token);

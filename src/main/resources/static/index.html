@@ -127,7 +127,7 @@
                     this.loading = true;
                     axios.get('/api/projects/my')
                         .then(res => {
-                            if (res.data.code === 200) {
+                            if (res.data.status === 200) {
                                 this.projects = res.data.data;
                             } else {
                                 this.$message.error(res.data.message);
