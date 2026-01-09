@@ -1,176 +1,143 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <title>项目控制台 - XiMA Web</title>
-    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
-    <style>
-        body { margin: 0; background-color: #f0f2f5; font-family: 'Segoe UI', sans-serif; }
+package com.whu.ximaweb.service.impl;
 
-        /* 顶部导航栏 */
-        .navbar { background: #fff; height: 60px; box-shadow: 0 1px 4px rgba(0,21,41,.08); display: flex; align-items: center; padding: 0 20px; justify-content: space-between; }
-        .logo { font-size: 20px; font-weight: bold; color: #1890ff; display: flex; align-items: center; gap: 10px; }
-        .user-profile { display: flex; align-items: center; cursor: pointer; }
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.whu.ximaweb.dto.ProjectImportRequest;
+import com.whu.ximaweb.mapper.SysBuildingMapper;
+import com.whu.ximaweb.mapper.SysProjectMapper;
+import com.whu.ximaweb.mapper.SysUserProjectMapper;
+import com.whu.ximaweb.model.SysBuilding;
+import com.whu.ximaweb.model.SysProject;
+import com.whu.ximaweb.model.SysUserProject;
+import com.whu.ximaweb.service.ProjectService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-        /* 内容区 */
-        .container { max-width: 1200px; margin: 20px auto; padding: 0 20px; }
-        .welcome-banner { background: #fff; padding: 20px; border-radius: 4px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; }
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
 
-        /* 项目卡片网格 */
-        .project-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+@Service
+public class ProjectServiceImpl implements ProjectService {
 
-        .project-card { background: #fff; border-radius: 8px; transition: all 0.3s; position: relative; overflow: hidden; border: 1px solid #e8e8e8; }
-        .project-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); transform: translateY(-2px); border-color: #1890ff; }
+    @Autowired
+    private com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
-        .card-header { padding: 20px; border-bottom: 1px solid #f0f0f0; background: #fafafa; }
-        .card-title { font-size: 18px; font-weight: 600; color: #333; margin-bottom: 5px; }
-        .card-desc { font-size: 13px; color: #999; }
+    @Autowired
+    private SysProjectMapper sysProjectMapper;
 
-        .card-body { padding: 20px; }
-        .stat-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px; color: #666; }
+    @Autowired
+    private SysUserProjectMapper sysUserProjectMapper;
 
-        .card-footer { padding: 15px 20px; border-top: 1px solid #f0f0f0; display: flex; justify-content: space-between; align-items: center; }
+    @Autowired
+    private SysBuildingMapper sysBuildingMapper;
 
-        /* 添加项目卡片 */
-        .add-card { border: 2px dashed #d9d9d9; background: #fafafa; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 200px; }
-        .add-card:hover { border-color: #1890ff; color: #1890ff; }
-        .add-icon { font-size: 40px; margin-bottom: 10px; }
-    </style>
-</head>
-<body>
-    <div id="app">
-        <div class="navbar">
-            <div class="logo">🏗️ XiMA 工程进度监测系统</div>
-            <div class="user-profile">
-                <el-dropdown @command="handleCommand">
-                    <span class="el-dropdown-link">
-                        👤 {{ username }} <i class="el-icon-arrow-down el-icon--right"></i>
-                    </span>
-                    <el-dropdown-menu slot="dropdown">
-                        <el-dropdown-item command="logout">退出登录</el-dropdown-item>
-                    </el-dropdown-menu>
-                </el-dropdown>
-            </div>
-        </div>
+    /**
+     * 导入项目（已修复重复导入报错的问题）
+     * 逻辑：如果项目已存在，则更新配置；如果不存在，则新建。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void importProject(ProjectImportRequest request, Integer userId) {
+        // 1. 检查该用户下是否已存在同名项目
+        QueryWrapper<SysProject> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("project_name", request.getProjectName());
+        queryWrapper.eq("created_by", userId);
+        SysProject existingProject = sysProjectMapper.selectOne(queryWrapper);
 
-        <div class="container">
-            <div class="welcome-banner">
-                <div>
-                    <h2 style="margin:0">👋 欢迎回来，{{ username }}</h2>
-                    <p style="margin:5px 0 0 0; color:#666">请选择一个项目进入工作台，或导入新项目。</p>
-                </div>
-                <el-button type="primary" icon="el-icon-plus" @click="gotoImport">导入新项目</el-button>
-            </div>
+        if (existingProject != null) {
+            // --- 情况A：项目已存在，更新配置 ---
+            existingProject.setPhotoFolderKeyword(request.getPhotoFolderKeyword());
+            existingProject.setDjiProjectUuid(request.getDjiProjectUuid());
+            existingProject.setDjiOrgKey(request.getDjiOrgKey());
+            existingProject.setObsBucketName(request.getObsBucketName());
+            existingProject.setObsAk(request.getObsAk());
+            existingProject.setObsSk(request.getObsSk());
+            existingProject.setObsEndpoint(request.getObsEndpoint());
+            // 更新修改时间等（可选）
+            sysProjectMapper.updateById(existingProject);
+        } else {
+            // --- 情况B：项目不存在，执行新建 ---
+            SysProject project = new SysProject();
+            project.setProjectName(request.getProjectName());
+            project.setPhotoFolderKeyword(request.getPhotoFolderKeyword());
+            project.setDjiProjectUuid(request.getDjiProjectUuid());
+            project.setDjiOrgKey(request.getDjiOrgKey());
+            project.setObsBucketName(request.getObsBucketName());
+            project.setObsAk(request.getObsAk());
+            project.setObsSk(request.getObsSk());
+            project.setObsEndpoint(request.getObsEndpoint());
+            
+            project.setCreatedBy(userId);
+            project.setCreatedAt(LocalDateTime.now());
 
-            <div class="project-grid" v-loading="loading">
+            sysProjectMapper.insert(project);
 
-                <div class="project-card" v-for="item in projects" :key="item.id">
-                    <div class="card-header">
-                        <div class="card-title">{{ item.projectName }}</div>
-                        <div class="card-desc">创建于: {{ formatDate(item.createdAt) }}</div>
-                    </div>
-                    <div class="card-body">
-                        <div class="stat-row">
-                            <span>📂 关键词:</span>
-                            <el-tag size="small">{{ item.photoFolderKeyword }}</el-tag>
-                        </div>
-                        <div class="stat-row">
-                            <span>☁️ 云存储:</span>
-                            <span>{{ item.obsBucketName }}</span>
-                        </div>
-                    </div>
-                    <div class="card-footer">
-                        <el-button type="text" style="color:#666">⚙️ 设置</el-button>
-                        <el-button type="primary" size="small" @click="enterProject(item)">🚀 进入工作台</el-button>
-                    </div>
-                </div>
+            // 建立用户与项目的关联
+            SysUserProject relation = new SysUserProject();
+            relation.setUserId(userId);
+            relation.setProjectId(project.getId());
+            sysUserProjectMapper.insert(relation);
+        }
+    }
 
-                <div class="project-card add-card" @click="gotoImport" v-if="projects.length === 0">
-                    <i class="el-icon-plus add-icon"></i>
-                    <div>暂无项目，点击导入</div>
-                </div>
+    /**
+     * 获取用户的所有项目（保留原有功能）
+     */
+    @Override
+    public List<SysProject> getUserProjects(Integer userId) {
+        // 1. 查关联表
+        QueryWrapper<SysUserProject> query = new QueryWrapper<>();
+        query.eq("user_id", userId);
+        List<SysUserProject> relations = sysUserProjectMapper.selectList(query);
 
-            </div>
-        </div>
-    </div>
+        if (relations.isEmpty()) {
+            return List.of();
+        }
 
-    <script src="https://unpkg.com/vue@2/dist/vue.js"></script>
-    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
-    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+        List<Integer> projectIds = relations.stream()
+                .map(SysUserProject::getProjectId)
+                .collect(Collectors.toList());
 
-    <script>
-        new Vue({
-            el: '#app',
-            data: {
-                username: localStorage.getItem('username') || '用户',
-                loading: false,
-                projects: []
-            },
-            created() {
-                this.checkLogin();
-                this.loadProjects();
-            },
-            methods: {
-                // 1. 检查登录状态
-                checkLogin() {
-                    const token = localStorage.getItem('token');
-                    if (!token) {
-                        this.$message.warning('请先登录');
-                        window.location.href = 'login.html';
-                    }
-                    // 配置 Axios 全局 Header
-                    axios.defaults.headers.common['Authorization'] = 'Bearer ' + token;
-                },
+        // 2. 查项目详情
+        return sysProjectMapper.selectBatchIds(projectIds);
+    }
 
-                // 2. 加载我的项目
-                loadProjects() {
-                    this.loading = true;
-                    axios.get('/api/projects/my')
-                        .then(res => {
-                            if (res.data.status === 200) {
-                                this.projects = res.data.data;
-                            } else {
-                                this.$message.error(res.data.message);
-                            }
-                        })
-                        .catch(err => {
-                            if (err.response && err.response.status === 401) {
-                                localStorage.clear();
-                                window.location.href = 'login.html';
-                            }
-                        })
-                        .finally(() => this.loading = false);
-                },
+    /**
+     * 更新项目的电子围栏（保留原有功能）
+     */
+    public void updateBoundary(Integer projectId, java.util.List<com.whu.ximaweb.dto.Coordinate> coords) {
+        // 1. 检查项目是否存在
+        SysProject project = sysProjectMapper.selectById(projectId);
+        if (project == null) {
+            throw new RuntimeException("项目不存在");
+        }
 
-                // 3. 进入项目
-                enterProject(project) {
-                    // 保存当前项目ID到本地，后续页面直接取用
-                    localStorage.setItem('currentProjectId', project.id);
-                    localStorage.setItem('currentProjectName', project.projectName);
+        try {
+            String jsonCoords = objectMapper.writeValueAsString(coords);
 
-                    this.$message.success('正在进入工作台...');
-                    // TODO: 跳转到工作台页面 (Dashboard)
-                    // 目前先跳转到电子围栏设置页演示流程
-                    setTimeout(() => window.location.href = 'boundary.html', 500);
-                },
+            // 2. 查找该项目下是否已有楼栋
+            QueryWrapper<SysBuilding> query = new QueryWrapper<>();
+            query.eq("project_id", projectId);
+            query.last("LIMIT 1");
+            SysBuilding building = sysBuildingMapper.selectOne(query);
 
-                gotoImport() {
-                    window.location.href = 'import.html';
-                },
-
-                handleCommand(cmd) {
-                    if (cmd === 'logout') {
-                        localStorage.clear();
-                        window.location.href = 'login.html';
-                    }
-                },
-
-                formatDate(dateStr) {
-                    if (!dateStr) return '-';
-                    return dateStr.replace('T', ' ').substring(0, 16);
-                }
+            if (building == null) {
+                // 如果没有，自动创建一个默认楼栋
+                building = new SysBuilding();
+                building.setProjectId(projectId);
+                building.setName("默认教学楼"); 
+                building.setBoundaryCoords(jsonCoords);
+                building.setCreatedAt(LocalDateTime.now());
+                sysBuildingMapper.insert(building);
+            } else {
+                // 如果有，更新它
+                building.setBoundaryCoords(jsonCoords);
+                sysBuildingMapper.updateById(building);
             }
-        });
-    </script>
-</body>
-</html>
+
+        } catch (Exception e) {
+            throw new RuntimeException("坐标保存失败: " + e.getMessage());
+        }
+    }
+}

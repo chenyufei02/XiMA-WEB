@@ -104,7 +104,7 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     /**
-     * 更新项目的电子围栏（保留原有功能）
+     * 更新项目的电子围栏
      */
     public void updateBoundary(Integer projectId, java.util.List<com.whu.ximaweb.dto.Coordinate> coords) {
         // 1. 检查项目是否存在
