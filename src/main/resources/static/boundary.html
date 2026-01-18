@@ -101,19 +101,24 @@
 
 <script>
     let allPhotos = [];
-    let selectedPhotos = []; // 当前选中的点: {lat, lng, id, screenX, screenY}
-    let existingBuildings = []; // 已存在的楼栋数据
-    let folderNames = new Set(); // 存储识别出的任务文件夹名
+    let selectedPhotos = [];
+    let existingBuildings = [];
+    let folderNames = new Set();
 
-    // 页面加载自动初始化
+    // 获取 Token 并确保包含 Bearer 前缀
+    let token = localStorage.getItem('token');
+    if (token && !token.startsWith('Bearer ')) {
+        token = 'Bearer ' + token;
+    }
+
     window.onload = function() {
-        // 从 localStorage 获取项目ID (由 index.html 跳转时写入)
         const pid = localStorage.getItem('currentProjectId');
         if(pid) {
             document.getElementById('projectIdInput').value = pid;
             initPage();
         } else {
-            alert("未获取到项目ID，请从首页重新进入");
+            document.getElementById('projectIdInput').value = 1; // 默认测试
+            initPage();
         }
     }
 
@@ -122,25 +127,29 @@
         loadExistingBuildings();
     }
 
-    // 1. 加载照片 (改用真实数据逻辑)
+    // 1. 加载照片
     async function loadPhotos() {
         const projectId = document.getElementById('projectIdInput').value;
         const listDiv = document.getElementById('photo-list');
         listDiv.innerHTML = '<p style="padding:10px; text-align:center">正在从数据库加载照片...</p>';
 
         try {
-            const res = await fetch(`/api/projects/${projectId}/photos`);
+            const res = await fetch(`/api/projects/${projectId}/photos`, {
+                headers: { 'Authorization': token }
+            });
             const json = await res.json();
 
+            console.log("🔍 后端返回数据:", json); // 调试用
+
+            // ✅✅✅ 核心修复：这里必须检查 json.status 而不是 json.code
             if (json.status === 200 && json.data) {
                 allPhotos = json.data;
-                // 核心：提取文件夹结构并填充下拉框
+                console.log(`✅ 成功获取 ${allPhotos.length} 张照片`);
                 extractFolders(allPhotos);
-                // 默认渲染全部，或者渲染第一个任务
                 filterPhotosByFolder();
             } else {
-                listDiv.innerHTML = `<p style="padding:10px; color:red">加载失败: ${json.message}</p>`;
-                // 清空下拉框
+                // 如果 status 不是 200，才显示错误
+                listDiv.innerHTML = `<p style="padding:10px; color:red">加载失败: ${json.message || '未知错误'}</p>`;
                 document.getElementById('folderSelect').innerHTML = '<option value="all">无数据</option>';
             }
         } catch (e) {
@@ -149,40 +158,57 @@
         }
     }
 
-    // ✅ 解析照片路径，提取文件夹名 (例如从 "projects/1/关键词/任务名/xxx.jpg" 提取 "任务名")
+    // 2. 智能提取任务名 (从路径中解析)
     function extractFolders(photos) {
         folderNames.clear();
         const select = document.getElementById('folderSelect');
         select.innerHTML = '<option value="all">📂 显示全部照片</option>';
 
+        // 您的日志路径结构:
+        // projects/1/激光测距/CQ武汉市政.../Remote-Control/DJI_xxx.jpeg
+
         photos.forEach(p => {
             if (p.photoUrl) {
-                const parts = p.photoUrl.split('/');
-                // 通常倒数第二个是文件夹名
-                if (parts.length >= 2) {
-                    const folder = parts[parts.length - 2];
-                    folderNames.add(folder);
+                // 解码URL，处理中文
+                const path = decodeURIComponent(p.photoUrl);
+                const parts = path.split('/');
+
+                // 倒数第2级通常是文件夹名 (Remote-Control)
+                // 倒数第3级通常是任务名 (CQ武汉市政...)
+                if (parts.length >= 3) {
+                    let folder = parts[parts.length - 2];
+
+                    // 如果遇到 Remote-Control 或 origin 这种大疆生成的子文件夹，就往上找一级
+                    if (folder === 'Remote-Control' || folder === 'origin' || folder === 'Photos') {
+                        folder = parts[parts.length - 3];
+                    }
+
+                    // 过滤掉项目ID和根目录名
+                    if (folder && folder !== 'projects' && folder !== String(document.getElementById('projectIdInput').value)) {
+                         folderNames.add(folder);
+                    }
                 }
             }
         });
 
-        // 填充下拉框
+        if (folderNames.size === 0) {
+            console.warn("⚠️ 未能从路径中提取到任务名，路径示例:", photos[0]?.photoUrl);
+        }
+
         folderNames.forEach(folder => {
             const option = document.createElement('option');
             option.value = folder;
-            option.innerText = "📁 " + decodeURIComponent(folder);
+            option.innerText = "📁 " + folder;
             select.appendChild(option);
         });
 
-        // 💡 优化体验：如果有文件夹，自动选中第一个（通常是最新的任务）
+        // 默认选中最新的一个任务（如果有）
         if (folderNames.size > 0) {
-            // 获取 set 的第一个元素
             const firstFolder = folderNames.values().next().value;
             select.value = firstFolder;
         }
     }
 
-    // ✅ 筛选逻辑
     function filterPhotosByFolder() {
         const select = document.getElementById('folderSelect');
         const selectedFolder = select.value;
@@ -193,7 +219,11 @@
         if (selectedFolder === 'all') {
             filtered = allPhotos;
         } else {
-            filtered = allPhotos.filter(p => p.photoUrl && p.photoUrl.includes(selectedFolder));
+            // 只要路径里包含选中的任务名，就显示
+            filtered = allPhotos.filter(p => {
+                const path = decodeURIComponent(p.photoUrl || '');
+                return path.includes(selectedFolder);
+            });
         }
         renderPhotoList(filtered);
     }
@@ -208,21 +238,19 @@
         }
 
         photos.forEach(p => {
-            // 使用真实 GPS 坐标
             const realLat = p.gpsLat || 0;
             const realLng = p.gpsLng || 0;
+            if (realLat === 0 && realLng === 0) return; // 过滤无坐标照片
 
-            // 过滤无效坐标
-            if (realLat === 0 && realLng === 0) return;
-
-            // 检查回显
             const isChecked = selectedPhotos.some(sel => sel.id == p.id) ? 'checked' : '';
 
-            // 从 URL 提取文件名用于显示 (可选)
+            // 提取简短文件名
             let displayName = "未知文件";
             if(p.photoUrl) {
                 const parts = p.photoUrl.split('/');
                 displayName = parts[parts.length - 1];
+                // 去掉前面的UUID前缀(如果有)，只显示 DJI_xxx.jpg 更好看
+                // 这里简单处理，显示最后一段
             }
 
             const div = document.createElement('div');
@@ -232,12 +260,12 @@
                        ${isChecked}
                        onchange="togglePhoto('${p.id}', ${realLat}, ${realLng}, this)">
 
-                <img src="${p.photoUrl || '#'}" onerror="this.src='https://via.placeholder.com/60?text=No+Img'">
+                <img src="${p.photoUrl}" onerror="this.src='https://via.placeholder.com/60?text=Error'">
 
                 <div class="photo-info">
                     <span class="photo-name" title="${displayName}">${displayName}</span>
                     <div style="color:#999">📅 ${formatTime(p.shootTime)}</div>
-                    <div style="font-size:10px; color:#ccc;">📍 ${realLat.toFixed(6)}, ${realLng.toFixed(6)}</div>
+                    <div style="font-size:10px; color:#ccc;">📍 ${Number(realLat).toFixed(6)}, ${Number(realLng).toFixed(6)}</div>
                 </div>
             `;
             listDiv.appendChild(div);
@@ -248,38 +276,39 @@
         return t ? t.replace('T', ' ') : '未知时间';
     }
 
-    // 2. 加载已存在的楼栋 (保持原有逻辑)
+    // 3. 加载已存在的楼栋
     async function loadExistingBuildings() {
         const projectId = document.getElementById('projectIdInput').value;
         try {
-            const res = await fetch(`/api/buildings/list?projectId=${projectId}`);
+            const res = await fetch(`/api/buildings/list?projectId=${projectId}`, {
+                headers: { 'Authorization': token }
+            });
             const json = await res.json();
+            // 同样使用 status === 200
             if (json.status === 200) {
                 existingBuildings = json.data;
-                if (selectedPhotos.length > 0) drawCanvas();
+                drawCanvas();
             }
         } catch (e) { console.error("加载楼栋失败", e); }
     }
 
-    // 3. 勾选/取消
     function togglePhoto(id, lat, lng, checkbox) {
         if (checkbox.checked) {
             selectedPhotos.push({id, lat, lng});
         } else {
-            selectedPhotos = selectedPhotos.filter(p => p.id != id); // 注意类型转换 ==
+            selectedPhotos = selectedPhotos.filter(p => p.id != id);
         }
         drawCanvas();
     }
 
     function resetSelection() {
         selectedPhotos = [];
-        // 取消所有 checkbox 的勾选状态
         const checkboxes = document.querySelectorAll('#photo-list input[type="checkbox"]');
         checkboxes.forEach(cb => cb.checked = false);
         drawCanvas();
     }
 
-    // 4. 绘图算法 (核心坐标转换)
+    // 4. 绘图算法
     function drawCanvas() {
         const container = document.getElementById('canvas-container');
         document.querySelectorAll('.point-marker').forEach(e => e.remove());
@@ -289,13 +318,6 @@
         svgLayer.innerHTML = '';
         existingLayer.innerHTML = '';
 
-        if (selectedPhotos.length === 0) {
-            document.querySelector('.empty-tip').style.display = 'block';
-            return;
-        }
-        document.querySelector('.empty-tip').style.display = 'none';
-
-        // 收集所有涉及的点来计算边界
         let allLats = selectedPhotos.map(p => p.lat);
         let allLngs = selectedPhotos.map(p => p.lng);
 
@@ -308,19 +330,23 @@
             }
         });
 
-        if(allLats.length === 0) return;
+        if(allLats.length === 0) {
+            document.querySelector('.empty-tip').style.display = 'block';
+            return;
+        }
+        document.querySelector('.empty-tip').style.display = 'none';
 
         const minLat = Math.min(...allLats), maxLat = Math.max(...allLats);
         const minLng = Math.min(...allLngs), maxLng = Math.max(...allLngs);
 
-        // 增加边距，防止点画在边缘
-        const latPad = (maxLat - minLat) * 0.2 || 0.00005;
-        const lngPad = (maxLng - minLng) * 0.2 || 0.00005;
+        const latSpan = maxLat - minLat;
+        const lngSpan = maxLng - minLng;
+        const pad = Math.max(latSpan, lngSpan) * 0.1 || 0.0001;
 
-        const viewMinLat = minLat - latPad;
-        const viewMaxLat = maxLat + latPad;
-        const viewMinLng = minLng - lngPad;
-        const viewMaxLng = maxLng + lngPad;
+        const viewMinLat = minLat - pad;
+        const viewMaxLat = maxLat + pad;
+        const viewMinLng = minLng - pad;
+        const viewMaxLng = maxLng + pad;
 
         const latRange = viewMaxLat - viewMinLat;
         const lngRange = viewMaxLng - viewMinLng;
@@ -329,11 +355,11 @@
 
         const toScreen = (lat, lng) => {
             const x = ((lng - viewMinLng) / lngRange) * width;
-            const y = height - ((lat - viewMinLat) / latRange) * height; // 纬度翻转
+            const y = height - ((lat - viewMinLat) / latRange) * height;
             return {x, y};
         };
 
-        // 绘制已有楼栋 (绿色虚线)
+        // 绘制已有楼栋
         existingBuildings.forEach(b => {
             if(b.boundaryCoords) {
                 try {
@@ -354,7 +380,7 @@
                         text.setAttribute("x", firstP.x);
                         text.setAttribute("y", firstP.y - 10);
                         text.setAttribute("fill", "#52c41a");
-                        text.setAttribute("font-size", "12");
+                        text.setAttribute("font-weight", "bold");
                         text.textContent = b.name;
                         existingLayer.appendChild(text);
                     }
@@ -362,27 +388,33 @@
             }
         });
 
-        // 绘制当前选区 (红色多边形)
-        selectedPhotos.forEach((p, index) => {
-            const screen = toScreen(p.lat, p.lng);
-            p.screenX = screen.x;
-            p.screenY = screen.y;
-
-            const dot = document.createElement('div');
-            dot.className = 'point-marker';
-            dot.style.left = screen.x + 'px';
-            dot.style.top = screen.y + 'px';
-            dot.innerText = index + 1;
-            container.appendChild(dot);
-        });
-
+        // 绘制当前选区
         if (selectedPhotos.length >= 2) {
-            const pointsStr = selectedPhotos.map(p => `${p.screenX},${p.screenY}`).join(' ');
+            const pointsStr = selectedPhotos.map(p => {
+                const s = toScreen(p.lat, p.lng);
+                return `${s.x},${s.y}`;
+            }).join(' ');
+
             const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
             polygon.setAttribute("points", pointsStr);
             polygon.setAttribute("style", "fill:rgba(255, 77, 79, 0.2); stroke:#ff4d4f; stroke-width:2");
             svgLayer.appendChild(polygon);
         }
+
+        selectedPhotos.forEach((p, index) => {
+            const screen = toScreen(p.lat, p.lng);
+            const dot = document.createElement('div');
+            dot.className = 'point-marker';
+            dot.style.left = screen.x + 'px';
+            dot.style.top = screen.y + 'px';
+            dot.innerText = index + 1;
+            dot.title = "点击可取消";
+            dot.onclick = () => {
+                const cb = document.querySelector(`input[onchange*="'${p.id}'"]`);
+                if(cb) { cb.click(); }
+            };
+            container.appendChild(dot);
+        });
     }
 
     // 5. 保存围栏
@@ -391,7 +423,6 @@
             alert("⚠️ 至少需要3个点才能构成一个围栏！");
             return;
         }
-
         const buildingName = document.getElementById('buildingNameInput').value.trim();
         if (!buildingName) {
             alert("⚠️ 请输入楼栋名称（例如：1号楼）");
@@ -408,15 +439,19 @@
         btn.disabled = true;
 
         try {
-            const res = await fetch(`/api/buildings/boundary?projectId=${projectId}&buildingName=${buildingName}`, {
+            const res = await fetch(`/api/projects/${projectId}/boundary`, {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': token
+                },
                 body: JSON.stringify(coords)
             });
             const json = await res.json();
 
+            // 同样修复 status 检查
             if (json.status === 200) {
-                alert("✅ " + json.message);
+                alert("✅ 保存成功！");
                 loadExistingBuildings();
                 resetSelection();
             } else {

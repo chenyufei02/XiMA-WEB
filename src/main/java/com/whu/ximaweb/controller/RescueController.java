@@ -19,6 +19,7 @@ import java.util.Optional;
 
 /**
  * 【抢救专用】本地文件导入控制器 (幂等版：支持断点续传)
+ * 用于将本地硬盘的历史照片补录到系统中，支持H1、H2推算所需的全量元数据
  */
 @RestController
 @RequestMapping("/api/rescue")
@@ -36,6 +37,12 @@ public class RescueController {
     @Autowired
     private PhotoProcessor photoProcessor;
 
+    /**
+     * 导入本地文件夹下的所有照片
+     * @param projectId 项目ID
+     * @param localPath 本地文件夹绝对路径 (例如: D:/DJI_Photos/2023_Manual_Flight)
+     * @param dryRun 是否预演 (true:不写真正入库, false:真实执行)
+     */
     @PostMapping("/import-local")
     public ApiResponse<String> importLocalFiles(
             @RequestParam Integer projectId,
@@ -87,7 +94,7 @@ public class RescueController {
                             QueryWrapper<ProjectPhoto> query = new QueryWrapper<>();
                             query.eq("photo_url", objectKey);
                             if (projectPhotoMapper.selectCount(query) > 0) {
-                                // 数据库里有了，直接跳过，不管OBS有没有 (假定一致性)
+                                // 数据库里有了，直接跳过，保护现有数据ID不变
                                 // System.out.println("   [跳过] 数据库已存在: " + file.getName());
                                 continue;
                             }
@@ -117,6 +124,10 @@ public class RescueController {
                                     photo.setGpsLat(java.math.BigDecimal.valueOf(data.getLatitude()));
                                     photo.setGpsLng(java.math.BigDecimal.valueOf(data.getLongitude()));
                                     photo.setLaserDistance(java.math.BigDecimal.valueOf(data.getDistance()));
+
+                                    // ✅ 新增：保存绝对高度 (用于 H2 智能推算)
+                                    photo.setAbsoluteAltitude(java.math.BigDecimal.valueOf(data.getDroneAbsoluteAltitude()));
+
                                     System.out.println("      -> XMP解析成功 (" + data.getCaptureTime() + ")");
                                 } else {
                                     photo.setShootTime(LocalDateTime.now());
