@@ -14,8 +14,7 @@ import javax.servlet.http.HttpServletResponse;
 import java.io.PrintWriter;
 
 /**
- * JWT 拦截器
- * 作用：拦截请求，检查 Token 有效性
+ * JWT 拦截器 (调试版)
  */
 @Component
 public class JwtInterceptor implements HandlerInterceptor {
@@ -25,42 +24,56 @@ public class JwtInterceptor implements HandlerInterceptor {
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
-        // 1. 获取请求头中的 Token
-        // 前端通常约定 Header 为： Authorization: Bearer <token>
-        String authHeader = request.getHeader("Authorization");
+        // 1. 获取请求 URL，方便定位
+        String requestURI = request.getRequestURI();
 
-        // 2. 如果是 OPTIONS 请求（跨域预检），直接放行
+        // 放行 OPTIONS 请求
         if ("OPTIONS".equals(request.getMethod())) {
             return true;
         }
 
-        // 3. 校验 Token 格式
+        // 2. 获取 Header
+        String authHeader = request.getHeader("Authorization");
+        System.out.println("========== JWT 拦截器日志 ==========");
+        System.out.println("请求接口: " + requestURI);
+        System.out.println("Authorization 头信息: " + authHeader);
+
+        // 3. 校验格式
         if (StringUtils.hasText(authHeader) && authHeader.startsWith("Bearer ")) {
-            // 去掉 "Bearer " 前缀拿到真正的 token 字符串
-            String token = authHeader.substring(7);
+            String token = authHeader.substring(7); // 去掉 "Bearer "
+            try {
+                // 4. 解析 Token
+                Claims claims = jwtUtils.parseToken(token);
+                if (claims != null) {
+                    Integer userId = (Integer) claims.get("userId");
+                    String username = (String) claims.get("username");
 
-            // 4. 验证 Token 是否有效
-            Claims claims = jwtUtils.parseToken(token);
-            if (claims != null) {
-                // Token 有效！
-                // 关键步骤：把 Token 里存的用户ID取出来，放到 Request 属性里
-                // 这样 Controller 就能知道当前是谁在操作了
-                Integer userId = (Integer) claims.get("userId");
-                request.setAttribute("currentUser", userId);
-                return true; // 放行
+                    System.out.println("✅ Token 验证成功! 用户ID: " + userId + ", 用户名: " + username);
+
+                    // 放入 Request 供 Controller 使用
+                    request.setAttribute("currentUser", userId);
+                    return true;
+                } else {
+                    System.err.println("❌ Token 解析结果为 null (可能已过期或签名不匹配)");
+                }
+            } catch (Exception e) {
+                System.err.println("❌ Token 解析发生异常: " + e.getMessage());
+                e.printStackTrace();
             }
+        } else {
+            System.err.println("❌ Header 格式错误或为空");
         }
+        System.out.println("==================================");
 
-        // 5. 验证失败，拦截请求并返回 401 错误 JSON
+        // 5. 验证失败
         response.setStatus(401);
         response.setContentType("application/json;charset=utf-8");
         PrintWriter writer = response.getWriter();
-        // 手动构造一个 JSON 返回给前端
-        String jsonResponse = new ObjectMapper().writeValueAsString(ApiResponse.error(401, "未登录或 Token 已过期，请重新登录"));
+        String jsonResponse = new ObjectMapper().writeValueAsString(ApiResponse.error(401, "未登录或 Token 无效(后端拦截)"));
         writer.print(jsonResponse);
         writer.flush();
         writer.close();
 
-        return false; // 拦截
+        return false;
     }
 }

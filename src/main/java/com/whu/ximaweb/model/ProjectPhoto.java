@@ -21,7 +21,7 @@ public class ProjectPhoto {
     private Long id;
 
     /**
-     * 新增字段：所属项目ID
+     * 所属项目ID
      * 用于实现多租户数据隔离，确保用户只能看到自己项目的照片
      */
     private Integer projectId;
@@ -40,6 +40,12 @@ public class ProjectPhoto {
      * 激光测距值 (对应 h1)
      */
     private BigDecimal laserDistance;
+
+    /**
+     * 无人机绝对飞行高度 (米)
+     * 用于H2智能推算: H2_new = H2_old + (Alt_new - Alt_old)
+     */
+    private BigDecimal absoluteAltitude;
 
     /**
      * 拍摄点纬度

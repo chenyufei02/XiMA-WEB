@@ -1,52 +1,70 @@
 package com.whu.ximaweb.model;
 
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
 import java.time.LocalDateTime;
 
 /**
- * 照片数据模型类 (升级版：支持精确时间)
+ * 照片元数据传输对象 (DTO)
+ * 用于在 PhotoProcessor 解析后临时存储数据，随后传递给 Task 进行入库
  */
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
 public class PhotoData {
 
+    /**
+     * 照片文件名
+     */
+    private String fileName;
+
+    /**
+     * 拍摄时间
+     */
+    private LocalDateTime captureTime;
+
+    /**
+     * 测量类型 (保留字段，暂设为 UNKNOWN)
+     */
+    private MeasurementType type;
+
+    /**
+     * 激光测距距离 (对应数据库的 laser_distance / h1)
+     * 来源 XMP: drone-dji:LRFTargetDistance
+     */
+    private double distance;
+
+    /**
+     * 目标点绝对高度 (注意：这是激光打到的点的海拔)
+     * 来源 XMP: drone-dji:LRFTargetAbsAlt
+     */
+    private double targetAbsAltitude;
+
+    /**
+     * ✅ 新增字段：无人机绝对飞行高度
+     * 来源 XMP: drone-dji:AbsoluteAltitude
+     * 用途：用于 H2 的智能推算算法
+     */
+    private double droneAbsoluteAltitude;
+
+    /**
+     * 拍摄点纬度
+     */
+    private double latitude;
+
+    /**
+     * 拍摄点经度
+     */
+    private double longitude;
+
+    /**
+     * 测量类型枚举
+     */
     public enum MeasurementType {
-        H1_ROOF,
-        H2_GROUND,
-        UNKNOWN
-    }
-
-    private final String fileName;
-    // ✅ 修改：从 LocalDate 改为 LocalDateTime
-    private final LocalDateTime captureTime;
-    private final MeasurementType type;
-    private final double distance;
-    private final double absoluteAltitude;
-    private final double latitude;
-    private final double longitude;
-
-    public PhotoData(String fileName, LocalDateTime captureTime, MeasurementType type, double distance,
-                     double absoluteAltitude, double latitude, double longitude) {
-        this.fileName = fileName;
-        this.captureTime = captureTime;
-        this.type = type;
-        this.distance = distance;
-        this.absoluteAltitude = absoluteAltitude;
-        this.latitude = latitude;
-        this.longitude = longitude;
-    }
-
-    public String getFileName() { return fileName; }
-    // ✅ 修改：Getter 返回 LocalDateTime
-    public LocalDateTime getCaptureTime() { return captureTime; }
-    public MeasurementType getType() { return type; }
-    public double getDistance() { return distance; }
-    public double getAbsoluteAltitude() { return absoluteAltitude; }
-    public double getLatitude() { return latitude; }
-    public double getLongitude() { return longitude; }
-
-    @Override
-    public String toString() {
-        return String.format(
-            "照片: %s [时间: %s, 距离: %.2f米]",
-            fileName, captureTime, distance
-        );
+        UNKNOWN,
+        H1, // 楼顶
+        H2  // 地面
     }
 }

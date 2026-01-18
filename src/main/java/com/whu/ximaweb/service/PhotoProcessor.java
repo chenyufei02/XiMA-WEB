@@ -13,12 +13,13 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * 照片处理器（升级版：精确时间解析）
+ * 照片处理器
+ * 负责解析照片文件的 XMP 元数据，提取激光测距、经纬度和高度信息
  */
 @Component
 public class PhotoProcessor {
 
-    // XMP 时间格式通常是 ISO 8601，带时区，例如 "2023-10-14T12:00:00+08:00"
+    // XMP 时间格式通常是 ISO 8601
     private static final DateTimeFormatter XMP_DATE_FORMATTER = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
 
     public Optional<PhotoData> process(InputStream inputStream, String fileName) {
@@ -30,29 +31,47 @@ public class PhotoProcessor {
                 return Optional.empty();
             }
 
-            // 1. ✅ 修改：解析为 LocalDateTime (精确到秒)
+            // 1. 解析时间
             LocalDateTime captureTime = parseXmpAttributeAsTime(xmpXml, "xmp:CreateDate");
 
-            // 2. 解析其他数据
+            // 2. 解析关键数据
+            // 激光测距距离 (H1)
             double distance = parseXmpAttributeAsDouble(xmpXml, "drone-dji:LRFTargetDistance");
+            // 目标点经纬度
             double latitude = parseXmpAttributeAsDouble(xmpXml, "drone-dji:LRFTargetLat");
             double longitude = parseXmpAttributeAsDouble(xmpXml, "drone-dji:LRFTargetLon");
-            double absAltitude = parseXmpAttributeAsDouble(xmpXml, "drone-dji:LRFTargetAbsAlt");
+            // 目标点绝对高度 (注意：这是激光打到的点的高度)
+            double targetAbsAltitude = parseXmpAttributeAsDouble(xmpXml, "drone-dji:LRFTargetAbsAlt");
 
-            // 3. 校验
+            // ✅ 新增：解析无人机自身的绝对飞行高度 (用于 H2 智能推算)
+            double droneAbsAltitude = parseXmpAttributeAsDouble(xmpXml, "drone-dji:AbsoluteAltitude");
+
+            // 3. 容错处理：时间解析兜底
             if (captureTime == null) {
-                // 如果没解析出时间，尝试用另一个常用字段 DateCreated
                 captureTime = parseXmpAttributeAsTime(xmpXml, "photoshop:DateCreated");
             }
-
             if (captureTime == null) {
-                 // 如果还是没有时间，这通常是不正常的，但在抢救模式下可以暂时返回空让上层处理
+                 // 如果实在没有时间，暂不处理该照片
                  return Optional.empty();
             }
 
-            // 4. 返回
+            // 4. 构建传输对象
             PhotoData.MeasurementType type = PhotoData.MeasurementType.UNKNOWN;
-            PhotoData data = new PhotoData(fileName, captureTime, type, distance, absAltitude, latitude, longitude);
+
+            // ✅ 修改：传入新增的 droneAbsAltitude 参数
+            // 参数顺序必须与 PhotoData.java 的构造函数一致：
+            // fileName, captureTime, type, distance, targetAbsAltitude, droneAbsoluteAltitude, latitude, longitude
+            PhotoData data = new PhotoData(
+                    fileName,
+                    captureTime,
+                    type,
+                    distance,
+                    targetAbsAltitude,
+                    droneAbsAltitude, // 这里传入了新解析的数据
+                    latitude,
+                    longitude
+            );
+
             return Optional.of(data);
 
         } catch (Exception e) {
@@ -62,13 +81,12 @@ public class PhotoProcessor {
     }
 
     /**
-     * ✅ 新增：解析带时区的时间字符串，并转为本地时间
+     * 解析带时区的时间字符串
      */
     private LocalDateTime parseXmpAttributeAsTime(String xmpXml, String attributeName) {
         String dateString = findXmpAttributeValue(xmpXml, attributeName);
         if (dateString != null) {
             try {
-                // 先解析为 OffsetDateTime (处理+08:00)，再转为 LocalDateTime
                 return OffsetDateTime.parse(dateString, XMP_DATE_FORMATTER).toLocalDateTime();
             } catch (Exception e) {
                 return null;

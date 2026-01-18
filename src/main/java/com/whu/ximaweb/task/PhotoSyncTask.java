@@ -71,7 +71,6 @@ public class PhotoSyncTask {
                 System.out.println(">>> 正在扫描项目: " + project.getProjectName());
 
                 // 2. 调用大疆API获取符合关键词的文件列表
-                // 注意：DjiService 里已经封装好了“先查任务 -> 再查媒体 -> 拼凑路径”的复杂逻辑
                 List<DjiMediaFileDto> djiFiles = djiService.getPhotosFromFolder(
                     project.getDjiProjectUuid(),
                     project.getDjiOrgKey(),
@@ -89,7 +88,7 @@ public class PhotoSyncTask {
                 for (DjiMediaFileDto djiFile : djiFiles) {
                     String fileName = djiFile.getFileName();
 
-                    // 🛑 1. 黑名单过滤 (彻底根治红字)
+                    // 🛑 1. 黑名单过滤
                     if ("Remote-Control".equals(fileName)
                             || fileName.endsWith(".MRK") || fileName.endsWith(".NAV")
                             || fileName.endsWith(".OBS") || fileName.endsWith(".RTK")
@@ -99,7 +98,6 @@ public class PhotoSyncTask {
                     }
 
                     // ✅ 2. 核心补丁：如果文件名没有后缀，强制加上 .JPG
-                    // 这样就能和本地抢救上传的 "DJI_xxx.JPG" 完美重合，触发 OBS 跳过机制
                     if (!fileName.toLowerCase().endsWith(".jpg") && !fileName.toLowerCase().endsWith(".jpeg")) {
                         fileName = fileName + ".jpeg";
                     }
@@ -116,7 +114,7 @@ public class PhotoSyncTask {
 
                     System.out.println("    🚀 [新照片] 正在同步: " + fileName);
 
-                    // 5. 下载与处理 (全包裹 try-catch)
+                    // 5. 下载与处理
                     try {
                         if (djiFile.getDownloadUrl() == null || djiFile.getDownloadUrl().isEmpty()) {
                             System.out.println("       ⚠️ 跳过: 无下载地址");
@@ -128,16 +126,15 @@ public class PhotoSyncTask {
                             if (!response.isSuccessful() || response.body() == null) throw new RuntimeException("HTTP " + response.code());
                             byte[] fileBytes = response.body().bytes();
 
-                            // 6. 上传华为云 (检测是否存在，避免重复上传)
+                            // 6. 上传华为云
                             if (!obsService.doesObjectExist(project.getObsAk(), project.getObsSk(), project.getObsEndpoint(), project.getObsBucketName(), objectKey)) {
                                 obsService.uploadStream(project.getObsAk(), project.getObsSk(), project.getObsEndpoint(), project.getObsBucketName(), objectKey, new ByteArrayInputStream(fileBytes));
                                 System.out.println("       -> 上传华为云成功");
                             } else {
-                                // 🌟 看到这行日志，就说明对齐成功
                                 System.out.println("       -> OBS已存在 (跳过上传)");
                             }
 
-                            // 7. 入库
+                            // 7. 入库 (核心修改区域)
                             try (InputStream xmpStream = new ByteArrayInputStream(fileBytes)) {
                                 Optional<PhotoData> photoDataOpt = photoProcessor.process(xmpStream, fileName);
                                 ProjectPhoto photo = new ProjectPhoto();
@@ -151,9 +148,13 @@ public class PhotoSyncTask {
                                     photo.setGpsLng(java.math.BigDecimal.valueOf(data.getLongitude()));
                                     photo.setLaserDistance(java.math.BigDecimal.valueOf(data.getDistance()));
 
+                                    // ✅ 新增：保存无人机绝对飞行高度 (用于 H2 智能推算)
+                                    // 这一步确保了 H2 补全算法所需的核心数据被持久化
+                                    photo.setAbsoluteAltitude(java.math.BigDecimal.valueOf(data.getDroneAbsoluteAltitude()));
+
                                     projectPhotoMapper.insert(photo);
                                     successCount++;
-                                    System.out.println("       ✅ 入库成功");
+                                    System.out.println("       ✅ 入库成功 (含高度数据)");
                                 } else {
                                     System.out.println("       ⚠️ 跳过: 无XMP数据");
                                 }
