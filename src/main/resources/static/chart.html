@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>施工进度看板 - XiMA 智造</title>
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        /* --- 1. 全局变量 --- */
+        :root {
+            --bg-color: #1e1e2d;
+            --sidebar-bg: #151521;
+            --card-bg: #2b2b40;
+            --text-primary: #e1e1e6;
+            --text-secondary: #a2a2b8;
+            --accent-purple: #7367f0;
+            --accent-blue: #00cfe8;
+            --border-color: rgba(255,255,255,0.08);
+        }
+
+        /* --- 2. 核心布局 (使用绝对定位撑满全屏) --- */
+        html, body {
+            margin: 0; padding: 0;
+            height: 100%; width: 100%;
+            overflow: hidden;
+            background-color: var(--bg-color);
+            font-family: 'Segoe UI', sans-serif;
+            color: var(--text-primary);
+        }
+
+        #app {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        /* 顶部栏 (固定 60px) */
+        .header {
+            height: 60px;
+            background: var(--card-bg);
+            padding: 0 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            flex-shrink: 0;
+        }
+
+        /* 主体区域 (占满剩余高度) */
+        .main-container {
+            flex: 1;
+            display: flex;
+            padding: 20px;
+            gap: 20px;
+            overflow: hidden; /* 防止溢出 */
+            position: relative;
+        }
+
+        /* 左侧侧边栏 (固定宽度) */
+        .sidebar {
+            width: 260px;
+            background: var(--sidebar-bg);
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid var(--border-color);
+            flex-shrink: 0;
+        }
+        .sidebar-header { padding: 15px; font-weight: bold; border-bottom: 1px solid var(--border-color); color: var(--text-secondary); }
+        .sidebar-list { flex: 1; overflow-y: auto; padding: 10px; }
+
+        /* 列表项 */
+        .building-item {
+            padding: 12px 15px; border-radius: 6px; cursor: pointer; margin-bottom: 8px;
+            display: flex; justify-content: space-between; align-items: center;
+            background: rgba(255,255,255,0.02); transition: all 0.2s;
+        }
+        .building-item:hover { background: rgba(255,255,255,0.05); }
+        .building-item.active { background: rgba(115, 103, 240, 0.15); border-left: 3px solid var(--accent-purple); color: var(--accent-purple); }
+        .floor-badge { font-size: 12px; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; color: var(--text-secondary); }
+        .building-item.active .floor-badge { background: var(--accent-purple); color: white; }
+
+        /* 右侧图表区 (撑满) */
+        .chart-area {
+            flex: 1;
+            background: var(--card-bg);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            padding: 20px;
+            overflow: hidden; /* 关键 */
+        }
+
+        /* 图表头部控制栏 */
+        .chart-controls {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 20px; /* 给下方留出空间 */
+            flex-shrink: 0;
+        }
+
+        /* 图表容器 (强制撑满剩余空间) */
+        .chart-wrapper {
+            flex: 1;
+            width: 100%;
+            position: relative;
+            min-height: 0; /* 允许 Flex 压缩 */
+        }
+
+        #mainChart {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* 空状态 */
+        .empty-state { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: var(--text-secondary); }
+
+        /* Element UI 样式微调 */
+        .el-button--default { background: transparent !important; border-color: var(--text-secondary) !important; color: var(--text-secondary) !important; }
+        .el-button--primary { background: linear-gradient(45deg, var(--accent-purple), var(--accent-blue)) !important; border: none !important; color: white !important; }
+        .el-radio-button__inner { background: #151521 !important; border: 1px solid var(--border-color) !important; color: var(--text-secondary) !important; }
+        .el-radio-button__orig-radio:checked + .el-radio-button__inner { background-color: var(--accent-purple) !important; border-color: var(--accent-purple) !important; color: #fff !important; box-shadow: none !important; }
+
+        [v-cloak] { display: none; }
+    </style>
+</head>
+<body>
+
+<div id="app" v-cloak>
+    <div class="header">
+        <h2 style="margin:0; font-size:18px"><i class="el-icon-data-line" style="color: var(--accent-blue)"></i> 施工进度看板</h2>
+        <div>
+            <el-button size="mini" icon="el-icon-refresh" @click="refreshData">刷新计算</el-button>
+            <el-button size="mini" @click="goHome">返回首页</el-button>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="sidebar">
+            <div class="sidebar-header">监测楼栋列表</div>
+            <div class="sidebar-list">
+                <div v-for="b in buildings" :key="b.id"
+                     :class="['building-item', currentBuildingId === b.id ? 'active' : '']"
+                     @click="selectBuilding(b)">
+                    <span>{{ b.name }}</span>
+                    <span v-if="b.lastFloor !== '-'" class="floor-badge">{{ b.lastFloor }} F</span>
+                </div>
+                <div v-if="buildings.length === 0" style="text-align:center; padding:20px; color:#666">暂无数据</div>
+            </div>
+        </div>
+
+        <div class="chart-area" v-loading="loading" element-loading-background="rgba(0, 0, 0, 0.7)">
+
+            <div class="chart-controls" v-if="currentBuildingId">
+                <span style="font-size:16px; font-weight:bold">施工进度趋势分析</span>
+                <el-radio-group v-model="chartMode" size="mini" @change="renderChart">
+                    <el-radio-button label="floor">🚧 楼层进度</el-radio-button>
+                    <el-radio-button label="height">📏 测量高度</el-radio-button>
+                </el-radio-group>
+            </div>
+
+            <div class="chart-wrapper">
+                <div id="mainChart"></div>
+            </div>
+
+            <div class="empty-state" v-if="!currentBuildingId">
+                <i class="el-icon-s-marketing" style="font-size: 48px; opacity: 0.3; margin-bottom:10px;"></i>
+                <p>请在左侧选择楼栋</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/vue@2/dist/vue.js"></script>
+<script src="https://unpkg.com/element-ui/lib/index.js"></script>
+<script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+<script>
+    new Vue({
+        el: '#app',
+        data: {
+            projectId: 1, token: localStorage.getItem('token'), loading: false,
+            buildings: [], currentBuildingId: null, progressData: [],
+            chartInstance: null, chartMode: 'floor'
+        },
+        mounted() {
+            const pid = localStorage.getItem('currentProjectId');
+            if(pid) this.projectId = pid;
+            if (this.token && !this.token.startsWith('Bearer ')) this.token = 'Bearer ' + this.token;
+
+            this.$nextTick(() => {
+                this.chartInstance = echarts.init(document.getElementById('mainChart'), 'dark', {renderer: 'canvas'});
+                window.addEventListener('resize', () => {
+                    this.chartInstance && this.chartInstance.resize();
+                });
+                this.loadBuildings();
+            });
+        },
+        methods: {
+            async loadBuildings() {
+                try {
+                    const res = await axios.get(`/api/buildings/list?projectId=${this.projectId}`, {headers: {'Authorization': this.token}});
+                    if((res.data.code||res.data.status)===200) {
+                        this.buildings = res.data.data.map(b => ({...b, lastFloor: '-' }));
+                        if(this.buildings.length > 0) this.selectBuilding(this.buildings[0]);
+                    }
+                } catch(e){}
+            },
+            async selectBuilding(b) {
+                this.currentBuildingId = b.id; this.loading = true;
+                try {
+                    const res = await axios.get(`/api/progress/data?projectId=${this.projectId}&buildingId=${b.id}`, {headers: {'Authorization': this.token}});
+                    if((res.data.code||res.data.status)===200) {
+                        this.progressData = res.data.data;
+                        if(this.progressData.length>0) {
+                            const valid = this.progressData.filter(d => d.floorLevel != null);
+                            if(valid.length > 0) b.lastFloor = valid[valid.length-1].floorLevel;
+                        }
+                        this.$nextTick(() => this.renderChart());
+                    }
+                } catch(e){} finally { this.loading = false; }
+            },
+            renderChart() {
+                if(!this.chartInstance || !this.progressData.length) return;
+
+                // 强制清空旧配置，避免叠加
+                this.chartInstance.clear();
+
+                const dates = this.progressData.map(i => i.measurementDate);
+                const values = this.progressData.map(i => this.chartMode==='floor' ? i.floorLevel : i.actualHeight);
+                const color = this.chartMode==='floor' ? '#7367f0' : '#00cfe8';
+                const title = this.chartMode==='floor' ? '层数' : '海拔(m)';
+
+                const option = {
+                    backgroundColor: 'transparent',
+                    tooltip: {
+                        trigger: 'axis',
+                        backgroundColor: 'rgba(43, 43, 64, 0.9)',
+                        borderColor: color,
+                        textStyle: { color: '#fff' }
+                    },
+                    // 🚀 关键修改：增加 Grid 留白，防止被标题挤压
+                    grid: {
+                        left: '50',
+                        right: '30',
+                        bottom: '30',
+                        top: '60',  /* 顶部留足空间 */
+                        containLabel: true
+                    },
+                    xAxis: {
+                        type: 'category',
+                        boundaryGap: false,
+                        data: dates,
+                        axisLine: { lineStyle: { color: 'rgba(255,255,255,0.3)' } },
+                        axisLabel: { color: '#a2a2b8' }
+                    },
+                    yAxis: {
+                        type: 'value',
+                        name: title,
+                        nameTextStyle: { color: '#fff', padding: [0, 0, 0, 20] },
+                        splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } },
+                        axisLabel: { color: '#a2a2b8' }
+                    },
+                    series: [{
+                        name: title,
+                        type: 'line',
+                        data: values,
+                        smooth: true,
+                        symbolSize: 8,
+                        itemStyle: { color: color },
+                        areaStyle: {
+                            color: new echarts.graphic.LinearGradient(0,0,0,1,[
+                                {offset:0,color:color},
+                                {offset:1,color:'rgba(0,0,0,0)'}
+                            ])
+                        }
+                    }]
+                };
+
+                this.chartInstance.setOption(option);
+                // 强制重绘一次尺寸
+                this.chartInstance.resize();
+            },
+            async refreshData() {
+                this.loading = true;
+                try {
+                    await axios.post(`/api/progress/calculate?projectId=${this.projectId}`, {}, {headers: {'Authorization': this.token}});
+                    this.$message.success("计算完成！");
+                    const b = this.buildings.find(x => x.id === this.currentBuildingId);
+                    if(b) this.selectBuilding(b);
+                } catch(e){ this.$message.error("计算失败"); } finally { this.loading = false; }
+            },
+            goHome() { window.location.href = 'index.html'; }
+        }
+    })
+</script>
+</body>
+</html>

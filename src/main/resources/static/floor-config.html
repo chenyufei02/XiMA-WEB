@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>楼层参数配置 - XiMA 智造</title>
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <style>
+        /* --- 全局暗黑主题 --- */
+        :root {
+            --bg-color: #1e1e2d;
+            --card-bg: #2b2b40;
+            --text-primary: #e1e1e6;
+            --text-secondary: #a2a2b8;
+            --accent-blue: #00cfe8;
+            --accent-purple: #7367f0;
+            --border-color: rgba(255,255,255,0.08);
+        }
+
+        body { margin: 0; padding: 20px; font-family: 'Segoe UI', sans-serif; background-color: var(--bg-color); color: var(--text-primary); }
+
+        .card-box {
+            background: var(--card-bg);
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+            margin-bottom: 20px;
+            border: 1px solid var(--border-color);
+        }
+
+        .header-title {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: white;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 15px;
+        }
+
+        .config-area {
+            margin-top: 20px;
+            padding: 25px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            border: 1px dashed rgba(255,255,255,0.1);
+        }
+
+        .mode-desc { font-size: 13px; color: var(--text-secondary); margin-bottom: 15px; }
+
+        /* --- Element UI 暗黑覆盖 --- */
+        .el-form-item__label { color: var(--text-secondary) !important; }
+        .el-radio { color: var(--text-primary) !important; margin-right: 30px; }
+        .el-radio__input.is-checked + .el-radio__label { color: var(--accent-blue) !important; }
+        .el-radio__inner { background: transparent; border-color: var(--text-secondary); }
+        .el-radio__input.is-checked .el-radio__inner { border-color: var(--accent-blue); background: var(--accent-blue); }
+
+        /* 输入框适配 */
+        .el-input__inner, .el-input-number__decrease, .el-input-number__increase {
+            background-color: #151521 !important;
+            border-color: var(--border-color) !important;
+            color: white !important;
+        }
+        .el-input.is-disabled .el-input__inner { background-color: rgba(255,255,255,0.05) !important; color: #999 !important; }
+
+        /* 下拉框适配 */
+        .el-select-dropdown { background-color: var(--card-bg) !important; border: 1px solid var(--border-color) !important; }
+        .el-select-dropdown__item { color: var(--text-secondary) !important; }
+        .el-select-dropdown__item.hover, .el-select-dropdown__item:hover { background-color: rgba(255,255,255,0.05) !important; }
+
+        /* 表格暗黑适配 */
+        .el-table, .el-table__expanded-cell { background-color: transparent !important; color: var(--text-primary) !important; }
+        .el-table th, .el-table tr { background-color: transparent !important; }
+        .el-table--border::after, .el-table--group::after, .el-table::before { background-color: var(--border-color) !important; }
+        .el-table td, .el-table th.is-leaf { border-bottom: 1px solid var(--border-color) !important; }
+        .el-table--enable-row-hover .el-table__body tr:hover > td { background-color: rgba(115, 103, 240, 0.1) !important; }
+
+        /* 按钮 */
+        .el-button--primary { background: linear-gradient(45deg, var(--accent-purple), var(--accent-blue)); border: none; }
+        .el-button--text { color: #ea5455; }
+        .btn-home { color: var(--text-secondary); border-color: var(--text-secondary); background: transparent; }
+        .btn-home:hover { color: white; border-color: white; }
+    </style>
+</head>
+<body>
+
+<div id="app">
+    <div class="card-box">
+        <div class="header-title">
+            <span><i class="el-icon-office-building" style="color: var(--accent-purple)"></i> 楼层参数配置</span>
+            <el-button size="small" icon="el-icon-s-home" class="btn-home" @click="goBack">返回首页</el-button>
+        </div>
+        <el-form :inline="true" size="small">
+            <el-form-item label="当前项目 ID">
+                <el-input v-model="projectId" disabled style="width: 80px;"></el-input>
+            </el-form-item>
+            <el-form-item label="选择楼栋">
+                <el-select v-model="currentBuildingId" placeholder="请选择楼栋" @change="loadFloorData">
+                    <el-option v-for="b in buildingList" :key="b.id" :label="b.name" :value="b.id"></el-option>
+                </el-select>
+            </el-form-item>
+        </el-form>
+    </div>
+
+    <div class="card-box" v-if="currentBuildingId">
+        <div style="margin-bottom: 20px; font-weight: bold; color: white;">🚀 配置生成策略</div>
+
+        <el-radio-group v-model="configMode" style="margin-bottom: 20px;">
+            <el-radio label="A">模式A: 统一标准层高</el-radio>
+            <el-radio label="B">模式B: 首层特殊 + 标准层 (推荐)</el-radio>
+            <el-radio label="C">模式C: 纯手动录入</el-radio>
+        </el-radio-group>
+
+        <div class="config-area" v-if="configMode === 'A' || configMode === 'B'">
+            <div class="mode-desc" v-if="configMode === 'A'">适用于所有楼层高度一致的情况（如办公楼标准段）。</div>
+            <div class="mode-desc" v-if="configMode === 'B'">适用于首层是大堂/商铺（较高），其余为标准住宅的情况。</div>
+
+            <el-form :inline="true" size="small">
+                <el-form-item label="总层数">
+                    <el-input-number v-model="params.totalFloors" :min="1" :max="100"></el-input-number>
+                </el-form-item>
+
+                <el-form-item label="首层高度(m)" v-if="configMode === 'B'">
+                    <el-input-number v-model="params.firstHeight" :precision="2" :step="0.1" :min="1"></el-input-number>
+                </el-form-item>
+
+                <el-form-item label="标准层高(m)">
+                    <el-input-number v-model="params.stdHeight" :precision="2" :step="0.1" :min="1"></el-input-number>
+                </el-form-item>
+
+                <el-form-item>
+                    <el-button type="primary" icon="el-icon-cpu" @click="generatePreview">生成预览数据</el-button>
+                </el-form-item>
+            </el-form>
+        </div>
+
+        <div style="margin-top: 20px;">
+            <div style="margin-bottom: 10px; font-weight: bold; color: var(--text-secondary); display: flex; justify-content: space-between;">
+                <span>📊 楼层数据预览 (共 {{ floorList.length }} 层)</span>
+                <span style="font-size: 12px; font-weight: normal;">* 可直接在表格中微调</span>
+            </div>
+
+            <el-table :data="floorList" border size="mini" height="400">
+                <el-table-column prop="floorNumber" label="楼层 (F)" width="80" align="center"></el-table-column>
+
+                <el-table-column label="本层层高 (米)" width="150" align="center">
+                    <template slot-scope="scope">
+                        <el-input-number v-model="scope.row.floorHeight" :precision="2" :step="0.1" size="mini"
+                            style="width: 100%;" @change="recalcCumulative(scope.$index)"></el-input-number>
+                    </template>
+                </el-table-column>
+
+                <el-table-column label="层顶累计标高 (米)" align="center">
+                    <template slot-scope="scope">
+                        <span style="font-weight: bold; color: var(--accent-blue);">{{ scope.row.cumulativeHeight }}</span>
+                    </template>
+                </el-table-column>
+
+                <el-table-column label="操作" width="80" align="center" v-if="configMode === 'C'">
+                    <template slot-scope="scope">
+                        <el-button type="text" icon="el-icon-delete" @click="removeFloor(scope.$index)">删除</el-button>
+                    </template>
+                </el-table-column>
+            </el-table>
+
+            <div style="margin-top: 10px;" v-if="configMode === 'C'">
+                <el-button size="mini" type="primary" plain icon="el-icon-plus" @click="addFloor">添加一层</el-button>
+            </div>
+
+            <div style="margin-top: 30px; text-align: center;">
+                <el-button type="primary" icon="el-icon-check" style="width: 200px;" @click="saveToBackend" :disabled="floorList.length === 0">
+                    保存配置
+                </el-button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card-box" v-else style="text-align: center; padding: 60px;">
+        <i class="el-icon-back" style="font-size: 40px; color: var(--text-secondary); margin-bottom: 10px;"></i>
+        <div style="color: var(--text-secondary);">请先在上方选择一个楼栋</div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/vue@2/dist/vue.js"></script>
+<script src="https://unpkg.com/element-ui/lib/index.js"></script>
+<script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+
+<script>
+    new Vue({
+        el: '#app',
+        data: {
+            projectId: 1,
+            token: localStorage.getItem('token'),
+            buildingList: [],
+            currentBuildingId: null,
+            configMode: 'B',
+            params: { totalFloors: 10, firstHeight: 4.5, stdHeight: 3.0 },
+            floorList: []
+        },
+        mounted() {
+            const pid = localStorage.getItem('currentProjectId');
+            if(pid) this.projectId = pid;
+            if (this.token && !this.token.startsWith('Bearer ')) this.token = 'Bearer ' + this.token;
+            this.loadBuildings();
+        },
+        methods: {
+            loadBuildings() {
+                axios.get(`/api/buildings/list?projectId=${this.projectId}`, { headers: { 'Authorization': this.token } })
+                .then(res => { if((res.data.code||res.data.status) === 200) this.buildingList = res.data.data; });
+            },
+            loadFloorData() {
+                this.floorList = [];
+                axios.get(`/api/floors/list?buildingId=${this.currentBuildingId}`, { headers: { 'Authorization': this.token } })
+                .then(res => {
+                    const data = res.data.data;
+                    if (data && data.length > 0) {
+                        this.floorList = data;
+                        this.$message.success("已加载历史配置");
+                        this.params.totalFloors = data.length;
+                    } else {
+                        this.$message.info("暂无配置，请生成");
+                    }
+                });
+            },
+            generatePreview() {
+                this.floorList = [];
+                let currentH = 0;
+                for (let i = 1; i <= this.params.totalFloors; i++) {
+                    let h = this.params.stdHeight;
+                    if (this.configMode === 'B' && i === 1) h = this.params.firstHeight;
+                    currentH += h;
+                    this.floorList.push({
+                        floorNumber: i,
+                        floorHeight: parseFloat(h.toFixed(2)),
+                        cumulativeHeight: parseFloat(currentH.toFixed(2))
+                    });
+                }
+                this.$message.success("预览生成完毕");
+            },
+            recalcCumulative(startIndex) {
+                let currentH = (startIndex > 0) ? this.floorList[startIndex - 1].cumulativeHeight : 0;
+                for (let i = startIndex; i < this.floorList.length; i++) {
+                    currentH += this.floorList[i].floorHeight;
+                    this.floorList[i].cumulativeHeight = parseFloat(currentH.toFixed(2));
+                }
+            },
+            addFloor() {
+                const lastCumulative = this.floorList.length > 0 ? this.floorList[this.floorList.length-1].cumulativeHeight : 0;
+                this.floorList.push({
+                    floorNumber: this.floorList.length + 1,
+                    floorHeight: 3.0,
+                    cumulativeHeight: parseFloat((lastCumulative + 3.0).toFixed(2))
+                });
+            },
+            removeFloor(index) {
+                this.floorList.splice(index, 1);
+                this.floorList.forEach((item, idx) => item.floorNumber = idx + 1);
+                this.recalcCumulative(0);
+            },
+            saveToBackend() {
+                axios.post(`/api/floors/save?projectId=${this.projectId}&buildingId=${this.currentBuildingId}`,
+                    this.floorList, { headers: { 'Authorization': this.token } }
+                ).then(res => {
+                    if ((res.data.code||res.data.status) === 200) this.$message.success("保存成功！");
+                    else this.$message.error(res.data.message);
+                });
+            },
+            goBack() { window.location.href = 'index.html'; }
+        }
+    })
+</script>
+</body>
+</html>

@@ -7,4 +7,5 @@ public interface ProgressService {
     // 如果用了上面代码里的status功能，这里也要加上定义
     void updateStatus(String key, String status);
     String getStatus(String key);
+    void calculateProjectProgress(Integer projectId);
 }
