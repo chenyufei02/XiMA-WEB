@@ -5,13 +5,16 @@ import com.whu.ximaweb.model.SysProject;
 import java.util.List;
 
 public interface ProjectService {
-    /**
-     * 导入并保存新项目
-     */
+
+    // 导入项目
     void importProject(ProjectImportRequest request, Integer userId);
 
-    /**
-     * 获取指定用户的所有项目
-     */
+    // 获取用户项目列表
     List<SysProject> getUserProjects(Integer userId);
+
+    // ✅ 新增：删除项目
+    void deleteProject(Integer projectId);
+
+    // ✅ 新增：更新项目基本信息
+    boolean updateProjectInfo(SysProject project);
 }

@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>项目指挥中心 - XiMA 智造</title>
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #1e1e2d; --card-bg: #2b2b40;
+            --text-primary: #e1e1e6; --text-secondary: #a2a2b8;
+            --accent-purple: #7367f0; --accent-blue: #00cfe8;
+            --accent-green: #28c76f; --accent-red: #ea5455; --accent-yellow: #ff9f43;
+            --border-color: rgba(255,255,255,0.08);
+        }
+        body { margin: 0; background-color: var(--bg-color); color: var(--text-primary); font-family: 'Segoe UI', sans-serif; overflow-x: hidden; }
+
+        /* 1. 顶部导航 */
+        .header { height: 60px; display: flex; align-items: center; justify-content: space-between; padding: 0 30px; background: rgba(43, 43, 64, 0.8); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border-color); position: sticky; top: 0; z-index: 100; }
+        .page-title { font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+        .back-btn { cursor: pointer; color: var(--text-secondary); font-size: 14px; transition: color 0.3s; }
+        .back-btn:hover { color: var(--accent-blue); }
+
+        /* 2. 概览卡片区 */
+        .overview-row { display: flex; gap: 20px; padding: 30px; max-width: 1400px; margin: 0 auto; }
+        .stat-card { flex: 1; background: var(--card-bg); padding: 25px; border-radius: 12px; display: flex; align-items: center; gap: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.2); border: 1px solid var(--border-color); position: relative; overflow: hidden; }
+        .stat-card::after { content: ''; position: absolute; right: 0; top: 0; bottom: 0; width: 4px; background: var(--accent-blue); }
+        .stat-card.danger::after { background: var(--accent-red); }
+        .stat-card.success::after { background: var(--accent-green); }
+
+        .stat-icon { width: 50px; height: 50px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 24px; background: rgba(255,255,255,0.05); }
+        .stat-info h3 { margin: 0 0 5px 0; font-size: 28px; color: var(--text-primary); }
+        .stat-info p { margin: 0; font-size: 13px; color: var(--text-secondary); }
+
+        /* 3. 楼栋卡片矩阵 */
+        .building-container { padding: 0 30px 50px 30px; max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 30px; }
+
+        .building-card { background: var(--card-bg); border-radius: 12px; border: 1px solid var(--border-color); overflow: hidden; }
+
+        /* 卡片头部 */
+        .b-header { padding: 20px 25px; background: rgba(0,0,0,0.2); border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
+        .b-title { font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+        .b-meta { font-size: 13px; color: var(--text-secondary); display: flex; gap: 20px; }
+
+        /* 状态标签 */
+        .status-badge { padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; display: flex; align-items: center; gap: 6px; }
+        .status-danger { background: rgba(234, 84, 85, 0.15); color: var(--accent-red); }
+        .status-success { background: rgba(40, 199, 111, 0.15); color: var(--accent-green); }
+        .status-warning { background: rgba(255, 159, 67, 0.15); color: var(--accent-yellow); }
+        .status-primary { background: rgba(115, 103, 240, 0.15); color: var(--accent-purple); }
+
+        /* 图表区域 (Grid Layout 1x3) */
+        .charts-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; height: 320px; }
+        .chart-box { position: relative; border-right: 1px solid var(--border-color); padding: 15px; }
+        .chart-box:last-child { border-right: none; }
+        .chart-title { font-size: 12px; color: var(--text-secondary); margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; }
+        .chart-container { width: 100%; height: 260px; }
+
+        /* Element UI 覆盖 */
+        .el-loading-mask { background-color: rgba(30,30,45,0.9); }
+    </style>
+</head>
+<body>
+
+<div id="app">
+    <div class="header">
+        <div class="page-title">
+            <i class="el-icon-monitor"></i> {{ dashboardData.projectName || '加载中...' }} - 数据指挥中心
+        </div>
+        <div class="back-btn" @click="goHome"><i class="el-icon-back"></i> 返回首页</div>
+    </div>
+
+    <div v-if="loading" style="text-align: center; padding: 100px;">
+        <i class="el-icon-loading" style="font-size: 40px; color: var(--accent-purple);"></i>
+        <p style="color: var(--text-secondary); margin-top: 20px;">正在从星际链路拉取数据...</p>
+    </div>
+
+    <div v-else>
+        <div class="overview-row">
+            <div class="stat-card">
+                <div class="stat-icon" style="color: var(--accent-purple)"><i class="el-icon-time"></i></div>
+                <div class="stat-info">
+                    <h3>{{ dashboardData.safeRunDays }} <small style="font-size:14px;color:#a2a2b8">天</small></h3>
+                    <p>安全运行天数</p>
+                </div>
+            </div>
+            <div class="stat-card danger">
+                <div class="stat-icon" style="color: var(--accent-red)"><i class="el-icon-warning-outline"></i></div>
+                <div class="stat-info">
+                    <h3>{{ dashboardData.delayedCount }} <small style="font-size:14px;color:#a2a2b8">栋</small></h3>
+                    <p>滞后预警</p>
+                </div>
+            </div>
+            <div class="stat-card success">
+                <div class="stat-icon" style="color: var(--accent-green)"><i class="el-icon-circle-check"></i></div>
+                <div class="stat-info">
+                    <h3>{{ dashboardData.normalCount }} <small style="font-size:14px;color:#a2a2b8">栋</small></h3>
+                    <p>进度正常</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="color: var(--accent-blue)"><i class="el-icon-camera"></i></div>
+                <div class="stat-info">
+                    <h3 style="font-size: 18px;">{{ dashboardData.lastUpdateDate }}</h3>
+                    <p>最近飞测进度时间</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="building-container">
+            <div v-for="(b, index) in dashboardData.buildings" :key="b.buildingId" class="building-card">
+                <div class="b-header">
+                    <div class="b-title">
+                        {{ b.buildingName }}
+                        <span v-if="b.planName" style="font-size:12px; color:var(--text-secondary); font-weight:normal">
+                            (模型: {{b.planName}})
+                        </span>
+                        <div :class="['status-badge', 'status-' + b.statusColor]">
+                            <i :class="b.statusColor === 'danger' ? 'el-icon-warning' : (b.statusColor === 'warning' ? 'el-icon-timer' : 'el-icon-success')"></i>
+                            {{ b.statusTag }}
+                        </div>
+                    </div>
+                    <div class="b-meta">
+                        <span><i class="el-icon-office-building"></i> 当前: {{ b.currentFloor }} 层</span>
+                        <span><i class="el-icon-s-data"></i> 高度: {{ b.currentHeight ? b.currentHeight.toFixed(1) : 0 }}m</span>
+                        <span><i class="el-icon-date"></i> 更新: {{ b.lastMeasureDate }}</span>
+                    </div>
+                </div>
+
+                <div class="charts-row">
+                    <div class="chart-box">
+                        <div class="chart-title"><span>📉 楼层进度对比 (计划 vs 实际)</span></div>
+                        <div :id="'chart-trend-' + index" class="chart-container"></div>
+                    </div>
+                    <div class="chart-box">
+                        <div class="chart-title"><span>🏗️ 物理高度生长 (米)</span></div>
+                        <div :id="'chart-height-' + index" class="chart-container"></div>
+                    </div>
+                    <div class="chart-box">
+                        <div class="chart-title"><span>📊 进度偏差量 (层)</span></div>
+                        <div :id="'chart-diff-' + index" class="chart-container"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="dashboardData.buildings.length === 0" style="text-align: center; color: var(--text-secondary); padding: 50px;">
+                暂无楼栋数据，请先去「电子围栏」页面绑定楼栋。
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/vue@2/dist/vue.js"></script>
+<script src="https://unpkg.com/element-ui/lib/index.js"></script>
+<script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+
+<script>
+    new Vue({
+        el: '#app',
+        data: {
+            projectId: 1,
+            loading: true,
+            dashboardData: {
+                projectName: '',
+                safeRunDays: 0,
+                delayedCount: 0,
+                normalCount: 0,
+                buildings: []
+            }
+        },
+        mounted() {
+            const pid = localStorage.getItem('currentProjectId');
+            if(pid) this.projectId = pid;
+            this.fetchData();
+        },
+        methods: {
+            goHome() { window.location.href = 'index.html'; },
+
+            fetchData() {
+                const token = localStorage.getItem('token');
+                axios.get(`/api/progress/dashboard/${this.projectId}`, {
+                    headers: { 'Authorization': token ? 'Bearer ' + token : '' }
+                }).then(res => {
+                    if((res.data.code || res.data.status) === 200) {
+                        this.dashboardData = res.data.data;
+                        this.loading = false;
+                        // 等待 DOM 渲染完毕后初始化图表
+                        this.$nextTick(() => {
+                            this.renderCharts();
+                        });
+                    } else {
+                        this.$message.error("数据获取失败");
+                    }
+                }).catch(() => {
+                    this.$message.error("网络请求异常");
+                    this.loading = false;
+                });
+            },
+
+            renderCharts() {
+                this.dashboardData.buildings.forEach((b, index) => {
+                    // 如果没有数据，跳过
+                    if (!b.dates || b.dates.length === 0) return;
+
+                    // --- 图1: 趋势对比 ---
+                    const chartTrend = echarts.init(document.getElementById('chart-trend-' + index));
+                    chartTrend.setOption({
+                        tooltip: { trigger: 'axis' },
+                        legend: { data: ['计划', '实际'], textStyle: { color: '#a2a2b8' }, bottom: 0 },
+                        grid: { top: 30, bottom: 30, left: 40, right: 20 },
+                        xAxis: { type: 'category', data: b.dates, axisLine: { lineStyle: { color: '#555' } } },
+                        yAxis: { type: 'value', splitLine: { lineStyle: { color: '#333' } } },
+                        series: [
+                            { name: '计划', type: 'line', data: b.planFloors, lineStyle: { color: '#28c76f' }, showSymbol: false },
+                            { name: '实际', type: 'line', data: b.actualFloors, lineStyle: { color: '#7367f0' }, itemStyle: { color: '#7367f0' } }
+                        ]
+                    });
+
+                    // --- 图2: 物理高度 (面积图) ---
+                    const chartHeight = echarts.init(document.getElementById('chart-height-' + index));
+                    chartHeight.setOption({
+                        tooltip: { trigger: 'axis' },
+                        grid: { top: 30, bottom: 30, left: 40, right: 20 },
+                        xAxis: { type: 'category', data: b.dates, axisLine: { lineStyle: { color: '#555' } } },
+                        yAxis: { type: 'value', splitLine: { lineStyle: { color: '#333' } } },
+                        series: [
+                            {
+                                name: '高度(m)', type: 'line', data: b.actualHeights, smooth: true,
+                                lineStyle: { color: '#00cfe8' },
+                                areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{offset: 0, color: 'rgba(0, 207, 232, 0.5)'}, {offset: 1, color: 'rgba(0, 207, 232, 0)'}]) }
+                            }
+                        ]
+                    });
+
+                    // --- 图3: 偏差分析 (正负柱状图) ---
+                    const chartDiff = echarts.init(document.getElementById('chart-diff-' + index));
+                    chartDiff.setOption({
+                        tooltip: { trigger: 'axis' },
+                        grid: { top: 30, bottom: 30, left: 40, right: 20 },
+                        xAxis: { type: 'category', data: b.dates, axisLine: { lineStyle: { color: '#555' } } },
+                        yAxis: { type: 'value', splitLine: { lineStyle: { color: '#333' } } },
+                        series: [
+                            {
+                                name: '偏差层数', type: 'bar', data: b.deviations,
+                                itemStyle: {
+                                    color: (params) => params.value >= 0 ? '#28c76f' : '#ea5455'
+                                }
+                            }
+                        ]
+                    });
+
+                    // 窗口大小改变时自适应
+                    window.addEventListener('resize', () => {
+                        chartTrend.resize(); chartHeight.resize(); chartDiff.resize();
+                    });
+                });
+            }
+        }
+    })
+</script>
+</body>
+</html>

@@ -2,305 +2,306 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>项目导入 - XiMA Web</title>
+    <title>项目导入 - XiMA 智造</title>
     <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
     <style>
-        /* ================== 复用 index.html 的基础样式 ================== */
-        body { margin: 0; font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "微软雅黑", Arial, sans-serif; background-color: #f0f2f5; }
+        /* --- 1. 全局主题定义 (深色赛博风) --- */
+        :root {
+            --bg-color: #1e1e2d;
+            --sidebar-bg: #151521;
+            --card-bg: #2b2b40;
+            --text-primary: #e1e1e6;
+            --text-secondary: #a2a2b8;
+            --accent-purple: #7367f0;
+            --accent-blue: #00cfe8;
+            --accent-green: #28c76f;
+            --border-color: rgba(255,255,255,0.08);
+        }
 
-        /* 顶部导航栏：100% 还原主页风格 */
-        .header { background-color: #fff; box-shadow: 0 1px 4px rgba(0,21,41,.08); padding: 0 20px; height: 60px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 999; }
-        .logo { font-size: 20px; font-weight: bold; color: #409EFF; cursor: pointer; } /* 主色调 #409EFF */
-        .user-info { display: flex; align-items: center; }
-        .user-name { margin-right: 15px; font-size: 14px; color: #606266; }
+        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: var(--bg-color); color: var(--text-primary); overflow: hidden; }
+        #app { display: flex; height: 100vh; }
 
-        /* 主内容容器：保持与主页一致的宽度和内边距 */
-        .main-container { padding: 20px; max-width: 1200px; margin: 0 auto; }
+        /* 侧边栏 */
+        .sidebar { width: 260px; background-color: var(--sidebar-bg); display: flex; flex-direction: column; border-right: 1px solid var(--border-color); }
+        .logo-area { height: 80px; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: bold; color: white; border-bottom: 1px solid var(--border-color); cursor: pointer; }
+        .logo-area i { color: var(--accent-purple); margin-right: 10px; font-size: 24px; }
+        .nav-menu { flex: 1; padding: 20px; }
+        .nav-item { display: flex; align-items: center; padding: 12px 20px; margin-bottom: 10px; border-radius: 8px; color: var(--text-secondary); cursor: pointer; transition: all 0.3s; text-decoration: none; }
+        .nav-item:hover, .nav-item.active { background: linear-gradient(90deg, rgba(115, 103, 240, 0.25), transparent); color: var(--accent-purple); border-left: 3px solid var(--accent-purple); }
+        .nav-item i { margin-right: 12px; font-size: 18px; }
 
-        /* ================== 本页特有样式 (Element UI 风格) ================== */
-        .page-header-box { margin-bottom: 20px; background: #fff; padding: 15px 20px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-        .step-card { min-height: 500px; }
-        .form-tip { font-size: 12px; color: #909399; margin-top: 5px; line-height: 1.5; }
-        .section-title { font-size: 16px; font-weight: bold; margin-bottom: 20px; border-left: 4px solid #409EFF; padding-left: 10px; }
+        /* 主内容 */
+        .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+        .top-header { height: 70px; display: flex; justify-content: space-between; align-items: center; padding: 0 40px; background-color: var(--bg-color); border-bottom: 1px solid var(--border-color); }
+        .page-title h2 { margin: 0; font-size: 24px; font-weight: 600; color: var(--text-primary); }
+        .user-profile { display: flex; align-items: center; gap: 15px; }
+        .avatar { width: 40px; height: 40px; background: linear-gradient(45deg, var(--accent-purple), var(--accent-blue)); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; color: white; }
+        .content-scroll { flex: 1; overflow-y: auto; padding: 30px 40px; }
+
+        .neon-card {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 40px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 4px 24px 0 rgba(0,0,0,0.2);
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .section-title { font-size: 18px; color: var(--accent-blue); margin-bottom: 25px; display: flex; align-items: center; }
+        .form-tip { font-size: 12px; color: var(--text-secondary); margin-top: 8px; line-height: 1.5; }
+
+        /* CSS 样式覆盖 */
+        .el-input__inner { background-color: #151521 !important; border: 1px solid var(--border-color) !important; color: var(--text-primary) !important; height: 45px; }
+        .el-input__inner:focus { border-color: var(--accent-purple) !important; }
+        .el-button--primary { background: linear-gradient(45deg, var(--accent-purple), var(--accent-blue)); border: none; font-weight: bold; }
+        .el-step__title.is-process { color: var(--accent-blue) !important; font-weight: bold; }
+        .el-step__title.is-wait { color: var(--text-secondary) !important; }
+        .el-step__title.is-success { color: var(--accent-green) !important; }
+
+        /* 表格样式修复 */
+        .el-table, .el-table__expanded-cell { background-color: transparent !important; color: var(--text-primary) !important; }
+        .el-table th, .el-table tr { background-color: transparent !important; border-bottom: 1px solid var(--border-color) !important; }
+        .el-table td { border-bottom: 1px solid var(--border-color) !important; }
+        .el-table--enable-row-hover .el-table__body tr:hover>td { background-color: rgba(115, 103, 240, 0.1) !important; }
+
+        /* ✅ 选中行样式：半透明紫色 */
+        .el-table__body tr.current-row>td { background-color: rgba(115, 103, 240, 0.3) !important; color: #fff !important; }
+
+        .el-table::before { background-color: transparent !important; }
+        .el-radio__label { color: var(--text-primary) !important; }
+        .el-loading-mask { background-color: rgba(30, 30, 45, 0.9) !important; }
+
+        /* 已导入行的样式（略微暗淡，但可点击） */
+        .imported-row { opacity: 0.8; }
+
+        /* 传送门卡片 */
+        .jump-card {
+            background: rgba(115, 103, 240, 0.1);
+            border: 1px dashed var(--accent-purple);
+            border-radius: 8px;
+            padding: 30px;
+            text-align: center;
+            margin-top: 30px;
+            animation: fadeIn 0.5s ease;
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body>
-    <div id="app">
-        <div class="header">
-            <div class="logo" @click="goHome">🏗️ 自动进度管控系统</div>
-            <div class="user-info">
-                <span class="user-name">欢迎, {{ username }}</span>
-                <el-button type="text" @click="logout" style="color: #F56C6C">退出登录</el-button>
+
+<div id="app">
+    <div class="sidebar">
+        <div class="logo-area" @click="goHome"><i class="el-icon-monitor"></i> XiMA 智造</div>
+        <div class="nav-menu">
+            <a class="nav-item" href="index.html"><i class="el-icon-menu"></i> 项目概览</a>
+            <div class="nav-item active"><i class="el-icon-upload"></i> 项目导入</div>
+            <div class="nav-item"><i class="el-icon-setting"></i> 系统设置</div>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="top-header">
+            <div class="page-title"><h2>数据接入中心</h2></div>
+            <div class="user-profile">
+                <el-button size="small" icon="el-icon-back" @click="goHome" style="background: rgba(255,255,255,0.1); color: white; border:none;">返回主页</el-button>
+                <div class="avatar">{{ username.substring(0,1).toUpperCase() }}</div>
             </div>
         </div>
 
-        <div class="main-container">
-            <div class="page-header-box">
-                <el-page-header @back="goHome" content="导入新项目">
-                </el-page-header>
-            </div>
-
-            <el-card class="step-card" shadow="hover">
-                <el-steps :active="activeStep" finish-status="success" simple style="margin-bottom: 30px;">
-                    <el-step title="大疆授权" icon="el-icon-key"></el-step>
-                    <el-step title="存储配置" icon="el-icon-upload-filled"></el-step>
-                    <el-step title="完成" icon="el-icon-check"></el-step>
+        <div class="content-scroll">
+            <div class="neon-card">
+                <el-steps :active="activeStep" finish-status="success" align-center style="margin-bottom: 40px;">
+                    <el-step title="大疆授权"></el-step>
+                    <el-step title="存储配置"></el-step>
+                    <el-step title="完成导入"></el-step>
                 </el-steps>
 
-                <div v-if="activeStep === 0" style="max-width: 600px; margin: 40px auto;">
-                    <div class="section-title">关联大疆司空 2 平台</div>
-                    <el-form label-position="top" size="medium">
-                        <el-form-item label="大疆组织密钥 (Organization Key)">
-                            <el-input
-                                v-model="form.apiKey"
-                                placeholder="请输入 eyjh 开头的长字符串"
-                                clearable>
-                            </el-input>
-                            <div class="form-tip">
-                                获取路径：司空2网页版 -> 组织设置 -> 司空Sync -> 复制组织密钥
-                            </div>
+                <div v-if="activeStep === 0">
+                    <div class="section-title"><i class="el-icon-key"></i> 第一步：关联大疆司空 2 平台</div>
+                    <el-form label-position="top">
+                        <el-form-item>
+                            <span slot="label" style="color: var(--text-primary);">组织密钥 (Organization Key)</span>
+                            <el-input v-model="form.apiKey" placeholder="请输入 eyjh 开头的密钥..." clearable></el-input>
+                            <div class="form-tip">🔑 获取路径：司空2网页版 -> 组织设置 -> 司空Sync -> 复制组织密钥</div>
                         </el-form-item>
-                        <el-form-item style="margin-top: 30px;">
-                            <el-button type="primary" style="width: 100%;" @click="fetchDjiProjects" :loading="loadingDji">
-                                下一步：查询我的项目
-                            </el-button>
-                        </el-form-item>
-                    </el-form>
-                </div>
-
-                <div v-if="activeStep === 1">
-                    <div class="section-title">选择要导入的项目</div>
-
-                    <el-table :data="djiProjects" border highlight-current-row @current-change="handleProjectSelect" style="width: 100%; margin-bottom: 20px;">
-                        <el-table-column width="55" align="center">
-                            <template slot-scope="scope">
-                                <el-radio v-model="selectedProjectUuid" :label="scope.row.uuid">&nbsp;</el-radio>
-                            </template>
-                        </el-table-column>
-                        <el-table-column prop="name" label="司空项目名称" width="250">
-                            <template slot-scope="scope">
-                                <span style="font-weight: bold;">{{ scope.row.name }}</span>
-                            </template>
-                        </el-table-column>
-                        <el-table-column prop="uuid" label="项目 UUID">
-                            <template slot-scope="scope">
-                                <el-tag size="small" type="info">{{ scope.row.uuid }}</el-tag>
-                            </template>
-                        </el-table-column>
-                        <el-table-column label="重命名 (可选)" width="250">
-                            <template slot-scope="scope">
-                                <el-input size="small" v-model="scope.row.rename" placeholder="不修改则保持原名"></el-input>
-                            </template>
-                        </el-table-column>
-                    </el-table>
-
-                    <div class="section-title" style="margin-top: 30px;">华为云 OBS 存储配置</div>
-                    <el-form :model="form" label-width="120px" size="medium" style="max-width: 900px;">
-                        <el-row :gutter="40">
-                            <el-col :span="12">
-                                <el-form-item label="Endpoint" required>
-                                    <el-input v-model="form.obsEndpoint" placeholder="obs.cn-east-3.myhuaweicloud.com"></el-input>
-                                </el-form-item>
-                            </el-col>
-                            <el-col :span="12">
-                                <el-form-item label="Bucket 桶名" required>
-                                    <el-input v-model="form.obsBucketName" placeholder="xima-photos-whu"></el-input>
-                                </el-form-item>
-                            </el-col>
-                        </el-row>
-                        <el-row :gutter="40">
-                            <el-col :span="12">
-                                <el-form-item label="Access Key" required>
-                                    <el-input v-model="form.obsAk" type="password" show-password placeholder="华为云 AK"></el-input>
-                                </el-form-item>
-                            </el-col>
-                            <el-col :span="12">
-                                <el-form-item label="Secret Key" required>
-                                    <el-input v-model="form.obsSk" type="password" show-password placeholder="华为云 SK"></el-input>
-                                </el-form-item>
-                            </el-col>
-                        </el-row>
-                        <el-form-item label="文件夹关键词">
-                            <el-input v-model="form.folderKeyword" style="width: 100%"></el-input>
-                            <div class="form-tip">系统将自动抓取包含此关键词的文件夹（默认：激光测距），用于过滤非工程照片。</div>
-                        </el-form-item>
-
-                        <div style="text-align: center; margin-top: 40px;">
-                            <el-button @click="activeStep = 0">上一步</el-button>
-                            <el-button type="primary" @click="submitImport" :loading="submitting" icon="el-icon-upload">确认并导入</el-button>
+                        <div style="margin-top: 40px; text-align: center;">
+                            <el-button type="primary" style="width: 200px;" @click="fetchDjiProjects" :loading="loadingDji" round>下一步：查询项目</el-button>
                         </div>
                     </el-form>
                 </div>
 
-                <div v-if="activeStep === 3" style="text-align: center; padding: 60px 0;">
-                    <i class="el-icon-success" style="font-size: 80px; color: #67C23A; margin-bottom: 20px;"></i>
-                    <h2 style="color: #303133; font-weight: 500;">导入成功！</h2>
-                    <p style="color: #606266; margin-bottom: 30px;">项目基础信息已建立，后台正在异步同步影像数据。</p>
-                    <el-button type="primary" @click="goHome">返回项目列表</el-button>
-                    <el-button @click="resetForm">继续导入</el-button>
+                <div v-if="activeStep === 1">
+                    <div class="section-title"><i class="el-icon-folder-opened"></i> 选择要接入的项目</div>
+
+                    <el-table :data="djiProjects" highlight-current-row @current-change="handleProjectSelect" :row-class-name="tableRowClassName" style="width: 100%; margin-bottom: 30px;">
+                        <el-table-column width="50" align="center">
+                            <template slot-scope="scope">
+                                <el-radio v-model="selectedProjectUuid" :label="scope.row.uuid">&nbsp;</el-radio>
+                            </template>
+                        </el-table-column>
+
+                        <el-table-column prop="name" label="项目名称">
+                            <template slot-scope="scope">
+                                <span>{{ scope.row.name }}</span>
+                                <el-tag v-if="scope.row.imported" type="success" size="mini" effect="dark" style="margin-left: 10px;">✅ 已在库中</el-tag>
+                            </template>
+                        </el-table-column>
+
+                        <el-table-column prop="uuid" label="UUID" width="300"></el-table-column>
+                    </el-table>
+
+                    <transition name="el-fade-in-linear" mode="out-in">
+
+                        <div v-if="isSelectedImported" key="exists" class="jump-card">
+                            <i class="el-icon-success" style="font-size: 48px; color: var(--accent-green); margin-bottom: 15px;"></i>
+                            <h3 style="color: var(--text-primary); margin: 0 0 10px 0;">此项目已导入</h3>
+                            <p style="color: var(--text-secondary); margin-bottom: 25px;">无需重复配置，您可以直接进入项目看板管理数据。</p>
+                            <el-button type="primary" @click="goHome" round icon="el-icon-s-promotion">进入项目概览</el-button>
+                        </div>
+
+                        <div v-else-if="selectedProjectUuid" key="new">
+                            <div class="section-title" style="margin-top: 40px;"><i class="el-icon-cloudy"></i> 华为云 OBS 配置</div>
+                            <el-form :model="form" label-width="100px" label-position="left">
+                                <el-row :gutter="20">
+                                    <el-col :span="12"><el-form-item><span slot="label" style="color: var(--text-secondary);">Endpoint</span><el-input v-model="form.obsEndpoint"></el-input></el-form-item></el-col>
+                                    <el-col :span="12"><el-form-item><span slot="label" style="color: var(--text-secondary);">Bucket</span><el-input v-model="form.obsBucketName"></el-input></el-form-item></el-col>
+                                </el-row>
+                                <el-row :gutter="20">
+                                    <el-col :span="12"><el-form-item><span slot="label" style="color: var(--text-secondary);">AK</span><el-input v-model="form.obsAk" type="password" show-password></el-input></el-form-item></el-col>
+                                    <el-col :span="12"><el-form-item><span slot="label" style="color: var(--text-secondary);">SK</span><el-input v-model="form.obsSk" type="password" show-password></el-input></el-form-item></el-col>
+                                </el-row>
+                                <el-form-item><span slot="label" style="color: var(--text-secondary);">关键词</span><el-input v-model="form.folderKeyword"></el-input><div class="form-tip">📂 仅抓取包含此关键词的文件夹（默认：激光测距）</div></el-form-item>
+
+                                <div style="margin-top: 40px; display: flex; justify-content: space-between;">
+                                    <el-button @click="activeStep = 0" plain>上一步</el-button>
+                                    <el-button type="primary" @click="submitImport" :loading="submitting" round style="padding: 12px 40px;">🚀 确认接入</el-button>
+                                </div>
+                            </el-form>
+                        </div>
+
+                        <div v-else key="empty" style="text-align: center; color: var(--text-secondary); margin-top: 50px;">
+                            <i class="el-icon-arrow-up"></i> 请先在上方列表中选择一个项目
+                        </div>
+
+                    </transition>
                 </div>
 
-            </el-card>
+                <div v-if="activeStep === 3" style="text-align: center; padding: 60px 0;">
+                    <div style="width: 80px; height: 80px; background: rgba(40, 199, 111, 0.2); color: var(--accent-green); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 40px; margin-bottom: 20px;"><i class="el-icon-check"></i></div>
+                    <h2 style="color: var(--text-primary); margin-bottom: 10px;">接入成功！</h2>
+                    <p style="color: var(--text-secondary); margin-bottom: 40px;">项目已同步至数据库，即将开始照片同步。</p>
+                    <div style="display: flex; gap: 20px; justify-content: center;">
+                        <el-button type="primary" @click="goHome" round icon="el-icon-s-home" style="width: 160px;">返回项目概览</el-button>
+                        <el-button @click="resetForm" plain round icon="el-icon-refresh-right">继续导入</el-button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
+</div>
 
-    <script src="https://unpkg.com/vue@2/dist/vue.js"></script>
-    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
-    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+<script src="https://unpkg.com/vue@2/dist/vue.js"></script>
+<script src="https://unpkg.com/element-ui/lib/index.js"></script>
+<script src="https://unpkg.com/axios/dist/axios.min.js"></script>
 
-    <script>
-        new Vue({
-            el: '#app',
-            data: {
-                username: '',
-                activeStep: 0,
-                loadingDji: false,
-                submitting: false,
-                djiProjects: [],
-                selectedProjectUuid: null,
-
-                // 表单数据
-                form: {
-                    apiKey: '',
-                    obsEndpoint: 'obs.cn-east-3.myhuaweicloud.com', // 默认值
-                    obsBucketName: 'xima-photos-whu',
-                    obsAk: '',
-                    obsSk: '',
-                    folderKeyword: '激光测距'
-                }
-            },
-            created() {
-                this.checkLogin();
-            },
-            methods: {
-                // 1. 登录检查：逻辑与 index.html 完全一致
-                checkLogin() {
-                    const token = localStorage.getItem('token');
-                    const user = localStorage.getItem('username');
-
-                    if (!token) {
-                        this.$message.warning('请先登录');
-                        window.location.href = 'login.html';
-                        return;
-                    }
-                    this.username = user || '用户';
-                },
-
-                // 2. 退出登录
-                logout() {
-                    localStorage.removeItem('token');
-                    localStorage.removeItem('username');
-                    window.location.href = 'login.html';
-                },
-
-                // 3. 返回主页
-                goHome() {
-                    window.location.href = 'index.html';
-                },
-
-                // 4. 获取大疆项目 (业务逻辑不变)
-                fetchDjiProjects() {
-                    if (!this.form.apiKey) {
-                        this.$message.warning('请输入大疆组织密钥');
-                        return;
-                    }
-
-                    this.loadingDji = true;
-                    axios.get('/api/projects/dji-workspaces', {
-                        params: { apiKey: this.form.apiKey },
-                        headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }
-                    })
-                    .then(res => {
-                        const result = res.data;
-                        if (result.data && Array.isArray(result.data)) {
-                            // 给每个项目加一个 rename 字段，默认等于原名
-                            this.djiProjects = result.data.map(p => ({
-                                ...p,
-                                rename: p.name
-                            }));
-
-                            if (this.djiProjects.length === 0) {
-                                this.$message.info('未查询到任何项目');
-                            } else {
-                                this.activeStep = 1; // 只有成功查到数据才进入下一步
-                            }
-                        } else {
-                            this.$message.error(result.message || '查询失败，请检查密钥');
-                        }
-                    })
-                    .catch(err => {
-                        console.error(err);
-                        this.$message.error('网络请求异常');
-                    })
-                    .finally(() => {
-                        this.loadingDji = false;
-                    });
-                },
-
-                // 5. 表格选中处理
-                handleProjectSelect(row) {
-                    if (row) {
-                        this.selectedProjectUuid = row.uuid;
-                    }
-                },
-
-                // 6. 提交导入 (业务逻辑不变)
-                submitImport() {
-                    if (!this.selectedProjectUuid) {
-                        this.$message.warning('请先选择一个大疆项目');
-                        return;
-                    }
-                    if (!this.form.obsAk || !this.form.obsSk) {
-                        this.$message.warning('请补全 OBS 密钥');
-                        return;
-                    }
-
-                    const selectedProj = this.djiProjects.find(p => p.uuid === this.selectedProjectUuid);
-
-                    // 构造后端需要的 DTO 格式
-                    const payload = {
-                        projectName: selectedProj.rename || selectedProj.name, // 使用重命名后的名字
-                        djiProjectUuid: selectedProj.uuid,
-                        djiOrgKey: this.form.apiKey,
-
-                        obsEndpoint: this.form.obsEndpoint,
-                        obsBucketName: this.form.obsBucketName,
-                        obsAk: this.form.obsAk,
-                        obsSk: this.form.obsSk,
-
-                        photoFolderKeyword: this.form.folderKeyword
-                    };
-
-                    this.submitting = true;
-                    axios.post('/api/projects/import', payload, {
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': 'Bearer ' + localStorage.getItem('token')
-                        }
-                    })
-                    .then(res => {
-                        if (res.data.code === 200 || res.data.success) {
-                            this.activeStep = 3; // 成功跳转
-                        } else {
-                            this.$message.error('导入失败: ' + res.data.message);
-                        }
-                    })
-                    .catch(err => {
-                        this.$message.error('请求异常');
-                    })
-                    .finally(() => {
-                        this.submitting = false;
-                    });
-                },
-
-                // 7. 重置
-                resetForm() {
-                    this.activeStep = 0;
-                    this.selectedProjectUuid = null;
-                    this.djiProjects = [];
-                }
+<script>
+    new Vue({
+        el: '#app',
+        data: {
+            username: 'Admin',
+            activeStep: 0,
+            loadingDji: false,
+            submitting: false,
+            djiProjects: [],
+            selectedProjectUuid: null,
+            form: { apiKey: '', obsEndpoint: 'obs.cn-east-3.myhuaweicloud.com', obsBucketName: 'xima-photos-whu', obsAk: '', obsSk: '', folderKeyword: '激光测距' }
+        },
+        computed: {
+            // 计算属性：判断当前选中的项目是否已导入
+            isSelectedImported() {
+                if (!this.selectedProjectUuid) return false;
+                const project = this.djiProjects.find(p => p.uuid === this.selectedProjectUuid);
+                return project ? project.imported : false; // 这里的 imported 字段由后端 DjiProjectDto 返回
             }
-        });
-    </script>
+        },
+        created() { this.checkLogin(); },
+        methods: {
+            checkLogin() {
+                const token = localStorage.getItem('token');
+                const user = localStorage.getItem('username');
+                if (!token) { window.location.href = 'login.html'; return; }
+                this.username = user || 'Admin';
+            },
+            goHome() { window.location.href = 'index.html'; },
+
+            tableRowClassName({row}) {
+                return row.imported ? 'imported-row' : '';
+            },
+
+            fetchDjiProjects() {
+                if (!this.form.apiKey) return this.$message.warning('请输入密钥');
+                this.loadingDji = true;
+                axios.get('/api/projects/dji-workspaces', {
+                    params: { apiKey: this.form.apiKey },
+                    headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }
+                }).then(res => {
+                    const result = res.data;
+                    if (result.status === 200 || result.code === 200) {
+                        this.djiProjects = result.data || [];
+                        if(this.djiProjects.length > 0) {
+                            this.activeStep = 1;
+                        } else {
+                            this.$message.info('未查到项目');
+                        }
+                    } else {
+                        this.$message.error(result.message || '查询失败');
+                    }
+                }).catch(() => this.$message.error('网络连接失败')).finally(() => this.loadingDji = false);
+            },
+
+            handleProjectSelect(row) {
+                // 现在允许选中已导入的行，从而触发 v-if="isSelectedImported"
+                if(row) this.selectedProjectUuid = row.uuid;
+            },
+
+            submitImport() {
+                // 双重保险：虽然前端隐藏了表单，但这里再校验一次
+                if(this.isSelectedImported) {
+                    this.$message.warning('该项目已导入，请直接返回首页');
+                    return;
+                }
+                if(!this.selectedProjectUuid) return this.$message.warning('请选择一个有效的项目');
+                if(!this.form.obsAk) return this.$message.warning('请输入AK/SK');
+
+                this.submitting = true;
+                const selectedProj = this.djiProjects.find(p => p.uuid === this.selectedProjectUuid);
+
+                const payload = {
+                    projectName: selectedProj.name,
+                    djiProjectUuid: selectedProj.uuid,
+                    djiOrgKey: this.form.apiKey,
+                    obsEndpoint: this.form.obsEndpoint,
+                    obsBucketName: this.form.obsBucketName,
+                    obsAk: this.form.obsAk,
+                    obsSk: this.form.obsSk,
+                    photoFolderKeyword: this.form.folderKeyword
+                };
+
+                axios.post('/api/projects/import', payload, {
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('token') }
+                }).then(res => {
+                    if(res.data.status === 200 || res.data.code === 200) {
+                        this.$message.success('导入成功！');
+                        this.activeStep = 3;
+                    } else {
+                        this.$message.error(res.data.message || '导入失败');
+                    }
+                }).catch(err => this.$message.error(err.response ? err.response.data.message : '请求异常')).finally(() => this.submitting = false);
+            },
+            resetForm() { this.activeStep = 0; this.selectedProjectUuid = null; this.djiProjects = []; }
+        }
+    })
+</script>
 </body>
 </html>

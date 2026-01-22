@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.whu.ximaweb.dto.ApiResponse;
 import com.whu.ximaweb.dto.Coordinate;
+import com.whu.ximaweb.mapper.PlanProgressMapper;
 import com.whu.ximaweb.mapper.ProjectPhotoMapper;
 import com.whu.ximaweb.mapper.SysBuildingMapper;
 import com.whu.ximaweb.model.ProjectPhoto;
@@ -16,6 +17,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 楼栋与电子围栏管理控制器
@@ -33,10 +35,11 @@ public class BuildingController {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private PlanProgressMapper planProgressMapper;
+
     /**
      * 1. 获取已保存的楼栋围栏列表
-     * 作用：当用户打开地图页面时，先把之前已经画好的楼栋（1号楼、2号楼...）都显示出来，
-     * 避免用户重复去画已经存在的楼。
      */
     @GetMapping("/list")
     public ApiResponse<List<SysBuilding>> getBuildings(@RequestParam Integer projectId) {
@@ -48,12 +51,7 @@ public class BuildingController {
     }
 
     /**
-     * 2. 获取指定“任务名称”下的所有照片坐标（拐点参考点）
-     * 逻辑：用户输入任务名称（如“1号楼拐点”），后台去照片库里找路径包含这个名字的所有照片，
-     * 把它们的 GPS 坐标取出来返给前端。用户看着这些点，就能把围栏画出来了。
-     *
-     * @param projectId 项目ID
-     * @param taskName 任务名称 (例如 "1号楼拐点")
+     * 2. 获取指定“任务名称”下的所有照片坐标
      */
     @GetMapping("/points")
     public ApiResponse<List<Coordinate>> getPhotoPoints(
@@ -62,24 +60,15 @@ public class BuildingController {
     ) {
         QueryWrapper<ProjectPhoto> query = new QueryWrapper<>();
         query.eq("project_id", projectId);
-
-        // 必须要有经纬度
         query.isNotNull("gps_lat");
         query.isNotNull("gps_lng");
 
-        // ✅ 核心逻辑修正：根据用户输入的“任务名称”进行模糊匹配
-        // 因为我们的路径是：projects/1/激光测距/1号楼拐点 2023.../xxx.jpg
-        // 所以只要搜 "1号楼拐点"，就能匹配到对应的照片
         if (taskName != null && !taskName.isEmpty()) {
             query.like("photo_url", taskName);
         }
-
-        // 限制数量，防止一次加载几万个点把浏览器卡死
         query.last("LIMIT 2000");
 
         List<ProjectPhoto> photos = projectPhotoMapper.selectList(query);
-
-        // 提取坐标
         List<Coordinate> points = new ArrayList<>();
         for (ProjectPhoto p : photos) {
             Coordinate c = new Coordinate();
@@ -87,16 +76,15 @@ public class BuildingController {
             c.setLng(p.getGpsLng().doubleValue());
             points.add(c);
         }
-
         return ApiResponse.success("查询成功，该任务下共有 " + points.size() + " 个测量点", points);
     }
 
     /**
      * 3. 保存用户画好的围栏
-     * 逻辑：前端把画好的一个个点传过来，后端存进数据库。
+     * ✅ 修改：返回类型改为 ApiResponse<Integer>，返回楼栋ID，方便前端立刻进行绑定
      */
     @PostMapping("/boundary")
-    public ApiResponse<String> saveBoundary(
+    public ApiResponse<Integer> saveBoundary(
             @RequestParam Integer projectId,
             @RequestParam String buildingName,
             @RequestBody List<Coordinate> coords) {
@@ -127,11 +115,84 @@ public class BuildingController {
                 sysBuildingMapper.updateById(building);
             }
 
-            return ApiResponse.success("电子围栏保存成功");
+            // 返回 ID
+            return ApiResponse.success("电子围栏保存成功", building.getId());
 
         } catch (Exception e) {
             e.printStackTrace();
             return ApiResponse.error("保存失败: " + e.getMessage());
         }
+    }
+
+    // ==========================================
+    // ✅ 新增功能区 (用于手动绑定 Navisworks 楼名)
+    // ==========================================
+
+    /**
+     * 4. 获取该项目下【还未绑定】的 Navisworks 计划楼名
+     */
+    @GetMapping("/options/unbound-plans")
+    public ApiResponse<List<String>> getUnboundPlans(@RequestParam Integer projectId) {
+        List<String> names = planProgressMapper.selectUnboundBuildingNames(projectId);
+        return ApiResponse.success("获取成功", names);
+    }
+
+    /**
+     * 5. 执行绑定 / 更新楼栋信息
+     * ✅ 增强：支持通过 ID 查找（用于改名），也支持通过 Name 查找（用于新建）
+     */
+    @PostMapping("/bind")
+    public ApiResponse<Object> bindPlan(@RequestBody Map<String, Object> payload) {
+        // 尝试获取 ID (编辑模式会有)
+        Integer id = null;
+        if (payload.get("id") != null) {
+            id = Integer.valueOf(payload.get("id").toString());
+        }
+
+        Integer projectId = null;
+        if (payload.get("projectId") != null) {
+            projectId = Integer.valueOf(payload.get("projectId").toString());
+        }
+        String currentName = (String) payload.get("currentName");
+
+        String planName = (String) payload.get("planBuildingName");
+        String displayName = (String) payload.get("displayName"); // 新名称
+
+        SysBuilding building = null;
+
+        // 1. 优先用 ID 找 (改名必须用 ID)
+        if (id != null) {
+            building = sysBuildingMapper.selectById(id);
+        }
+        // 2. 没有 ID 用名字找 (新建绑定)
+        else {
+            QueryWrapper<SysBuilding> query = new QueryWrapper<>();
+            query.eq("project_id", projectId);
+            query.eq("name", currentName);
+            building = sysBuildingMapper.selectOne(query);
+        }
+
+        if (building == null) {
+            return ApiResponse.error("楼栋不存在，请先保存围栏");
+        }
+
+        // 修改名称 (如果用户改了)
+        if (displayName != null && !displayName.isEmpty()) {
+            building.setName(displayName);
+        }
+        // 更新绑定关系
+        building.setPlanBuildingName(planName);
+        sysBuildingMapper.updateById(building);
+
+        return ApiResponse.success("绑定成功");
+    }
+
+    /**
+     * 6. 删除楼栋
+     */
+    @DeleteMapping("/{id}")
+    public ApiResponse<Object> deleteBuilding(@PathVariable Integer id) {
+        sysBuildingMapper.deleteById(id);
+        return ApiResponse.success("删除成功");
     }
 }

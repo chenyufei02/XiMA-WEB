@@ -5,21 +5,36 @@
     <title>定义电子围栏 - XiMA 智造</title>
     <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
     <style>
-        /* --- 1. 全局暗黑主题变量 (与首页统一) --- */
+        /* =========================================================
+           1. 全局深色主题变量定义 (保持原样)
+           ========================================================= */
         :root {
-            --bg-color: #1e1e2d;         /* 深蓝黑背景 */
-            --sidebar-bg: #151521;       /* 侧边栏背景 */
-            --card-bg: #2b2b40;          /* 卡片/工具栏背景 */
-            --text-primary: #e1e1e6;     /* 主文字 */
-            --text-secondary: #a2a2b8;   /* 次文字 */
-            --accent-purple: #7367f0;    /* 强调色：紫 */
-            --accent-blue: #00cfe8;      /* 强调色：蓝 */
+            --bg-color: #1e1e2d;
+            --sidebar-bg: #151521;
+            --card-bg: #2b2b40;
+            --text-primary: #e1e1e6;
+            --text-secondary: #a2a2b8;
+            --accent-purple: #7367f0;
+            --accent-blue: #00cfe8;
+            --accent-green: #28c76f;
+            --accent-red: #ea5455;
             --border-color: rgba(255,255,255,0.08);
         }
 
-        body { margin: 0; padding: 0; height: 100vh; font-family: 'Segoe UI', sans-serif; overflow: hidden; display: flex; background-color: var(--bg-color); color: var(--text-primary); }
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            overflow: hidden;
+            display: flex;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+        }
 
-        /* --- 2. 左侧侧边栏 (支持拖拽) --- */
+        /* =========================================================
+           2. 侧边栏样式 (拖拽、列表)
+           ========================================================= */
         .sidebar {
             width: 320px;
             min-width: 240px;
@@ -28,14 +43,17 @@
             flex-direction: column;
             background: var(--sidebar-bg);
             border-right: 1px solid var(--border-color);
-            position: relative; /* 关键：为了定位拖拽条 */
+            position: relative;
             z-index: 10;
         }
 
-        .sidebar-header { padding: 20px; border-bottom: 1px solid var(--border-color); background: var(--sidebar-bg); }
-        .sidebar-title { margin: 0 0 10px 0; font-size: 16px; color: var(--text-primary); font-weight: 600; display: flex; align-items: center; gap: 8px; }
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border-color);
+            background: var(--sidebar-bg);
+        }
 
-        /* 🚀 核心：拖拽条样式 */
+        /* 拖拽手柄条 */
         .resizer {
             width: 6px;
             height: 100%;
@@ -48,61 +66,237 @@
             transition: background 0.2s;
         }
         .resizer:hover, .resizer.active {
-            background: var(--accent-blue); /* 鼠标放上去变亮蓝 */
+            background: var(--accent-blue);
         }
 
-        /* 照片列表样式 */
-        #photo-list { flex: 1; overflow-y: auto; padding: 10px; }
-        /* 美化滚动条 */
+        #photo-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+        }
+
+        /* 滚动条美化 */
         #photo-list::-webkit-scrollbar { width: 6px; }
-        #photo-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
-        #photo-list::-webkit-scrollbar-track { background: transparent; }
+        #photo-list::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.2);
+            border-radius: 3px;
+        }
 
-        .photo-item { display: flex; align-items: center; padding: 12px; border-bottom: 1px solid var(--border-color); cursor: pointer; background: var(--card-bg); border-radius: 8px; margin-bottom: 10px; transition: all 0.2s; border: 1px solid transparent; }
-        .photo-item:hover { background: rgba(115, 103, 240, 0.15); border-color: var(--accent-purple); }
-        .photo-item img { width: 60px; height: 60px; object-fit: cover; margin-right: 12px; border-radius: 6px; border: 1px solid var(--border-color); }
-        .photo-info { font-size: 12px; color: var(--text-secondary); overflow: hidden; }
-        .photo-name { font-weight: bold; color: var(--text-primary); margin-bottom: 4px; display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; width: 100%; }
+        .photo-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            border-bottom: 1px solid var(--border-color);
+            cursor: pointer;
+            background: var(--card-bg);
+            border-radius: 8px;
+            margin-bottom: 10px;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+        .photo-item:hover {
+            background: rgba(115, 103, 240, 0.15);
+            border-color: var(--accent-purple);
+        }
+        .photo-item img {
+            width: 60px;
+            height: 60px;
+            object-fit: cover;
+            margin-right: 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+        }
+        .photo-info {
+            font-size: 12px;
+            color: var(--text-secondary);
+            overflow: hidden;
+            flex: 1;
+        }
+        .photo-name {
+            font-weight: bold;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+            display: block;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            width: 100%;
+        }
 
-        /* --- 3. 右侧主区域 --- */
-        .main { flex: 1; position: relative; display: flex; flex-direction: column; min-width: 0; background: var(--bg-color); }
+        /* =========================================================
+           3. 主操作区样式 (画布、工具栏)
+           ========================================================= */
+        .main {
+            flex: 1;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            background: var(--bg-color);
+        }
 
-        .toolbar { padding: 0 20px; background: var(--card-bg); border-bottom: 1px solid var(--border-color); display: flex; gap: 15px; align-items: center; height: 60px; z-index: 100; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
-        .input-group { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text-secondary); }
+        .toolbar {
+            padding: 0 20px;
+            background: var(--card-bg);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            height: 60px;
+            z-index: 100;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
 
-        /* 画布容器 */
-        #canvas-container { flex: 1; position: relative; margin: 20px; background: #1e1e2d; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; box-shadow: inset 0 0 30px rgba(0,0,0,0.5); }
+        .input-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
 
-        /* 画布上的点 */
-        .point-marker { position: absolute; width: 14px; height: 14px; background: var(--accent-purple); border-radius: 50%; transform: translate(-50%, -50%); cursor: pointer; border: 2px solid white; box-shadow: 0 0 10px var(--accent-purple); z-index: 10; display: flex; align-items: center; justify-content: center; color: white; font-size: 10px; font-weight: bold; }
-        .point-marker:hover { transform: translate(-50%, -50%) scale(1.3); background: var(--accent-blue); }
+        #canvas-container {
+            flex: 1;
+            position: relative;
+            margin: 20px;
+            background: #1e1e2d;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: inset 0 0 30px rgba(0,0,0,0.5);
+        }
 
-        .empty-tip { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: var(--text-secondary); pointer-events: none; }
+        /* 选点标记 (红色圆点) */
+        .point-marker {
+            position: absolute;
+            width: 14px;
+            height: 14px;
+            background: var(--accent-purple);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            cursor: pointer;
+            border: 2px solid white;
+            box-shadow: 0 0 10px var(--accent-purple);
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 10px;
+            font-weight: bold;
+        }
 
-        /* --- 4. Element UI 暗黑样式强力覆盖 --- */
-        .el-input__inner { background-color: #151521 !important; border-color: var(--border-color) !important; color: white !important; }
-        .el-select-dropdown { background-color: var(--card-bg) !important; border-color: var(--border-color) !important; }
-        .el-select-dropdown__item { color: var(--text-secondary) !important; }
-        .el-select-dropdown__item.hover, .el-select-dropdown__item:hover { background-color: rgba(255,255,255,0.05) !important; }
+        /* 空状态提示 */
+        .empty-tip {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: var(--text-secondary);
+            pointer-events: none;
+        }
+
+        /* =========================================================
+           4. Element UI 暗黑模式深度适配
+           ========================================================= */
+        .el-input__inner {
+            background-color: #151521 !important;
+            border-color: var(--border-color) !important;
+            color: white !important;
+        }
+        .el-select-dropdown {
+            background-color: var(--card-bg) !important;
+            border-color: var(--border-color) !important;
+        }
+        .el-select-dropdown__item {
+            color: var(--text-secondary) !important;
+        }
+        .el-select-dropdown__item.hover, .el-select-dropdown__item:hover {
+            background-color: rgba(255,255,255,0.05) !important;
+        }
+
+        /* 弹窗样式适配 */
+        .el-dialog {
+            background-color: var(--card-bg) !important;
+            border: 1px solid var(--border-color) !important;
+        }
+        .el-dialog__title {
+            color: var(--text-primary) !important;
+        }
+        .el-dialog__body {
+            color: var(--text-primary) !important;
+            padding: 20px 30px !important;
+        }
+        .el-form-item__label {
+            color: var(--text-secondary) !important;
+        }
+
         /* 按钮样式微调 */
-        .el-button--default { background: transparent !important; border: 1px solid var(--text-secondary) !important; color: var(--text-secondary) !important; }
-        .el-button--default:hover { color: var(--accent-blue) !important; border-color: var(--accent-blue) !important; }
-        .el-button--primary { background: linear-gradient(45deg, var(--accent-purple), var(--accent-blue)) !important; border: none !important; color: white !important; }
-        .el-button--danger { background: rgba(234, 84, 85, 0.2) !important; color: #ea5455 !important; border: 1px solid #ea5455 !important; }
-        .el-button--success { background: linear-gradient(45deg, #28c76f, #48da89) !important; border: none !important; color: white !important; }
+        .el-button--default {
+            background: transparent !important;
+            border: 1px solid var(--text-secondary) !important;
+            color: var(--text-secondary) !important;
+        }
+        .el-button--default:hover {
+            color: var(--accent-blue) !important;
+            border-color: var(--accent-blue) !important;
+        }
+        .el-button--primary {
+            background: linear-gradient(45deg, var(--accent-purple), var(--accent-blue)) !important;
+            border: none !important;
+            color: white !important;
+        }
+        .el-button--success {
+            background: linear-gradient(45deg, #28c76f, #48da89) !important;
+            border: none !important;
+            color: white !important;
+        }
+        .el-button--danger {
+            background: rgba(234, 84, 85, 0.2) !important;
+            color: #ea5455 !important;
+            border: 1px solid #ea5455 !important;
+        }
+        .el-tag--dark { border-color: transparent; }
+
+        /* =========================================================
+           5. 底图交互增强样式 (用于实现点击修改功能)
+           ========================================================= */
+        .building-label {
+            cursor: pointer;
+            font-weight: bold;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+            transition: all 0.2s;
+        }
+        .building-label:hover {
+            fill: #fff !important;
+            text-decoration: underline;
+            font-size: 14px;
+        }
+
+        .building-polygon {
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .building-polygon:hover {
+            stroke: #fff !important;
+            stroke-width: 2 !important;
+            fill-opacity: 0.3 !important;
+        }
     </style>
 </head>
 <body>
 
 <div class="sidebar" id="sidebar">
-    <div class="resizer" id="dragMe" title="拖动改变宽度"></div>
-
+    <div class="resizer" id="dragMe"></div>
     <div class="sidebar-header">
-        <h3 class="sidebar-title"><i class="el-icon-camera"></i> 拐点照片选择</h3>
-        <p style="font-size:12px; color:var(--text-secondary); margin:5px 0 15px 0;">勾选代表建筑物顶角的照片</p>
+        <h3 style="margin:0 0 10px 0; color:var(--text-primary); display:flex; align-items:center;">
+            <i class="el-icon-camera-solid" style="margin-right:8px; color:var(--accent-purple);"></i> 拐点照片选择
+        </h3>
+        <p style="font-size:12px; color:var(--text-secondary); margin:5px 0 15px 0;">勾选代表建筑物顶角的照片以绘制围栏</p>
 
         <div>
-            <label style="font-size:12px; color:var(--text-secondary); display:block; margin-bottom:8px;">📂 任务筛选：</label>
+            <label style="font-size:12px; color:var(--text-secondary); display:block; margin-bottom:8px;">📂 任务文件夹筛选：</label>
             <select id="folderSelect" style="width:100%; padding:8px; background:#151521; color:white; border:1px solid rgba(255,255,255,0.1); border-radius:4px; outline:none;" onchange="filterPhotosByFolder()">
                 <option value="all">加载中...</option>
             </select>
@@ -119,22 +313,17 @@
 <div class="main">
     <div class="toolbar">
         <div class="input-group">
-            <label>ID:</label>
-            <el-input v-model="projectId" size="mini" disabled style="width: 50px;"></el-input>
-        </div>
-
-        <el-divider direction="vertical"></el-divider>
-
-        <div class="input-group">
-            <label>🏠 楼栋名称:</label>
-            <el-input v-model="buildingName" placeholder="如: 1号楼" size="small" style="width: 150px;"></el-input>
+            <i class="el-icon-folder-opened"></i>
+            <label>当前项目ID:</label>
+            <el-tag size="small" type="info" effect="dark">{{ projectId }}</el-tag>
         </div>
 
         <div style="flex:1"></div>
 
-        <el-button size="small" icon="el-icon-refresh" @click="initPage">刷新</el-button>
-        <el-button type="danger" size="small" icon="el-icon-delete" @click="resetSelection">重置</el-button>
-        <el-button type="success" size="small" icon="el-icon-check" @click="saveBoundary">保存围栏</el-button>
+        <el-button size="small" icon="el-icon-refresh" @click="initPage">刷新数据</el-button>
+        <el-button type="danger" size="small" icon="el-icon-delete" @click="resetSelection" :disabled="selectedPhotos.length===0">清空画布</el-button>
+
+        <el-button type="success" size="small" icon="el-icon-check" @click="openSaveDialog" :disabled="selectedPhotos.length<3">保存围栏</el-button>
 
         <el-divider direction="vertical"></el-divider>
         <el-button size="small" icon="el-icon-s-home" @click="goHome">返回首页</el-button>
@@ -142,105 +331,280 @@
 
     <div id="canvas-container">
         <div class="empty-tip" v-if="selectedPhotos.length === 0">
-            <i class="el-icon-edit-outline" style="font-size: 48px; margin-bottom: 10px; opacity: 0.5;"></i>
+            <div style="font-size: 60px; margin-bottom: 20px; opacity: 0.3;"><i class="el-icon-edit-outline"></i></div>
             <p>请在左侧勾选照片，系统将自动连线生成围栏</p>
+            <p style="font-size:12px; opacity:0.6; margin-top:10px; color:var(--accent-green);">(提示：点击底图中的绿色楼栋名，可以修改命名或绑定计划)</p>
         </div>
+
         <svg id="svg-layer" style="width:100%; height:100%; position:absolute; top:0; left:0; pointer-events: none; z-index: 5;"></svg>
+
         <svg id="svg-existing-layer" style="width:100%; height:100%; position:absolute; top:0; left:0; pointer-events: none; z-index: 1;"></svg>
     </div>
+
+    <el-dialog :title="editMode ? '编辑楼栋信息' : '保存电子围栏'" :visible.sync="saveDialogVisible" width="480px" :close-on-click-modal="false" append-to-body>
+        <div style="margin-bottom:20px; color:var(--text-secondary); font-size:13px; background:rgba(115,103,240,0.1); padding:10px; border-radius:4px;">
+            <i class="el-icon-info"></i> {{ editMode ? '在这里修改楼栋名称或重新关联计划模型。' : '保存后，请选择该围栏对应的 BIM 模型楼号，以便系统自动计算施工进度。' }}
+        </div>
+
+        <el-form :model="saveForm" label-width="100px" size="small">
+            <el-form-item label="楼栋命名" required>
+                <el-input v-model="saveForm.name" placeholder="例如：综合教学楼"></el-input>
+            </el-form-item>
+
+            <el-form-item label="关联计划">
+                <el-select v-model="saveForm.plan" placeholder="请选择对应模型" style="width:100%" clearable>
+                    <el-option label="暂不绑定 (仅保存围栏)" value=""></el-option>
+                    <el-option v-for="item in planOptions" :key="item" :label="'🏗️ 模型: ' + item + '号楼'" :value="item"></el-option>
+                </el-select>
+            </el-form-item>
+        </el-form>
+
+        <span slot="footer" class="dialog-footer" style="display:flex; justify-content:space-between; align-items:center;">
+            <div v-if="editMode">
+                <el-popconfirm title="确定要删除这个楼栋吗？" icon="el-icon-info" icon-color="red" @confirm="deleteCurrentBuilding">
+                    <el-button slot="reference" type="text" style="color:var(--accent-red)">删除此楼栋</el-button>
+                </el-popconfirm>
+            </div>
+            <div v-else></div> <div>
+                <el-button @click="saveDialogVisible = false" size="small">取 消</el-button>
+                <el-button type="primary" @click="confirmSave" :loading="saving" size="small" icon="el-icon-check">
+                    {{ editMode ? '更新信息' : '确认保存' }}
+                </el-button>
+            </div>
+        </span>
+    </el-dialog>
+
 </div>
 
 <script src="https://unpkg.com/vue@2/dist/vue.js"></script>
 <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+<script src="https://unpkg.com/axios/dist/axios.min.js"></script>
 
 <script>
     // ==========================================
-    // 1. 拖拽侧边栏逻辑 (原生 JS)
+    // 1. 侧边栏拖拽逻辑 (完整保留)
     // ==========================================
     const resizer = document.getElementById('dragMe');
     const sidebar = document.getElementById('sidebar');
-    let x = 0;
-    let w = 0;
+    let x = 0, w = 0;
 
-    const mouseDownHandler = function(e) {
+    resizer.addEventListener('mousedown', e => {
         x = e.clientX;
-        const sbWidth = window.getComputedStyle(sidebar).width;
-        w = parseInt(sbWidth, 10);
-        resizer.classList.add('active'); // 高亮显示
-        document.addEventListener('mousemove', mouseMoveHandler);
-        document.addEventListener('mouseup', mouseUpHandler);
-    };
+        w = parseInt(window.getComputedStyle(sidebar).width, 10);
+        document.addEventListener('mousemove', mouseMove);
+        document.addEventListener('mouseup', mouseUp);
+    });
 
-    const mouseMoveHandler = function(e) {
-        const dx = e.clientX - x;
-        sidebar.style.width = `${w + dx}px`;
-    };
+    const mouseMove = e => sidebar.style.width = `${w + e.clientX - x}px`;
 
-    const mouseUpHandler = function() {
-        resizer.classList.remove('active');
-        document.removeEventListener('mousemove', mouseMoveHandler);
-        document.removeEventListener('mouseup', mouseUpHandler);
-        // 拖拽结束后，触发一次窗口resize，强制重绘画布
-        window.dispatchEvent(new Event('resize'));
+    const mouseUp = () => {
+        document.removeEventListener('mousemove', mouseMove);
+        document.removeEventListener('mouseup', mouseUp);
+        window.dispatchEvent(new Event('resize')); // 触发画布重绘
     };
-
-    resizer.addEventListener('mousedown', mouseDownHandler);
 
     // ==========================================
-    // 2. Vue 实例 (接管右侧工具栏和弹窗)
+    // 2. Vue 核心业务逻辑
     // ==========================================
     new Vue({
         el: '.main',
         data: {
             projectId: 1,
-            buildingName: '',
-            selectedPhotos: [] // 用于控制空状态提示的显示
+            selectedPhotos: [], // 当前选中的照片点
+
+            // 弹窗控制
+            saveDialogVisible: false,
+            saving: false,
+
+            // 编辑状态控制
+            editMode: false,
+            currentEditId: null,
+
+            // 表单数据
+            planOptions: [],
+            saveForm: {
+                name: '',
+                plan: ''
+            }
         },
         mounted() {
-            // 获取项目ID
+            // 从 LocalStorage 获取当前项目ID
             const pid = localStorage.getItem('currentProjectId');
             if(pid) this.projectId = pid;
 
-            // 暴露给全局函数调用
+            // 暴露给全局以便原生JS调用
             window.vueInstance = this;
 
-            // 延迟加载数据，确保页面渲染完毕
+            // 初始化数据
             setTimeout(initPage, 300);
         },
         methods: {
             initPage() { initPage(); },
             resetSelection() { resetSelection(); },
-            saveBoundary() { saveBoundary(); },
-            goHome() { window.location.href = 'index.html'; }
+            goHome() { window.location.href = 'index.html'; },
+
+            // 打开保存对话框 (新增模式)
+            openSaveDialog() {
+                if(this.selectedPhotos.length < 3) {
+                    this.$message.warning("电子围栏至少需要 3 个坐标点才能构成闭合区域");
+                    return;
+                }
+                this.editMode = false;
+                this.currentEditId = null;
+
+                this.loadPlanOptions();
+
+                this.saveForm.name = '';
+                this.saveForm.plan = '';
+                this.saveDialogVisible = true;
+            },
+
+            // 打开编辑对话框 (修改模式)
+            openEditDialog(building) {
+                this.editMode = true;
+                this.currentEditId = building.id; // 存下 ID 用于更新
+
+                this.loadPlanOptions();
+
+                // 回显数据
+                this.saveForm.name = building.name;
+                this.saveForm.plan = building.planBuildingName;
+                this.saveDialogVisible = true;
+            },
+
+            // 加载未绑定的计划列表
+            loadPlanOptions() {
+                const token = localStorage.getItem('token');
+                axios.get(`/api/buildings/options/unbound-plans?projectId=${this.projectId}`, {
+                    headers: { 'Authorization': token ? 'Bearer ' + token : '' }
+                }).then(res => {
+                    const result = res.data;
+                    if((result.code || result.status) === 200) {
+                        this.planOptions = result.data;
+
+                        // 细节优化：如果是编辑模式，且当前已绑定的计划不在"未绑定列表"中
+                        // (因为它已经被当前楼栋绑定了)，得把它加回来显示，否则回显会是空白
+                        if (this.editMode && this.saveForm.plan && !this.planOptions.includes(this.saveForm.plan)) {
+                            this.planOptions.unshift(this.saveForm.plan);
+                        }
+                    }
+                });
+            },
+
+            // 确认保存 / 更新
+            confirmSave() {
+                if(!this.saveForm.name) {
+                    this.$message.warning("请输入楼栋名称");
+                    return;
+                }
+
+                this.saving = true;
+                const token = localStorage.getItem('token');
+                const authHeader = { 'Authorization': token ? 'Bearer ' + token : '', 'Content-Type': 'application/json' };
+
+                if (this.editMode) {
+                    // --- 核心逻辑 1：编辑模式 ---
+                    // 直接调用 bind 接口 (带 ID)，后端会执行更新操作
+                    axios.post('/api/buildings/bind', {
+                        id: this.currentEditId, // 传 ID，确保改名能找到人
+                        projectId: this.projectId,
+                        displayName: this.saveForm.name,
+                        planBuildingName: this.saveForm.plan
+                    }, { headers: authHeader }).then(res => {
+                        if ((res.data.code || res.data.status) === 200) {
+                            this.$message.success("修改成功");
+                            this.saveDialogVisible = false;
+                            loadExistingBuildings(); // 刷新底图
+                        } else {
+                            this.$message.error(res.data.message || "修改失败");
+                        }
+                    }).finally(() => {
+                        this.saving = false;
+                    });
+
+                } else {
+                    // --- 核心逻辑 2：新增模式 ---
+                    const coords = this.selectedPhotos.map(p => ({ lat: p.lat, lng: p.lng }));
+
+                    // 第一步：保存围栏几何信息，拿回 ID
+                    axios.post(`/api/buildings/boundary?projectId=${this.projectId}&buildingName=${this.saveForm.name}`, coords, {
+                        headers: authHeader
+                    }).then(res => {
+                        const result = res.data;
+                        if((result.code || result.status) === 200) {
+                            // 围栏保存成功，检查是否需要绑定计划
+                            if (this.saveForm.plan) {
+                                // 第二步：调用绑定接口 (使用刚拿到的 ID)
+                                return axios.post('/api/buildings/bind', {
+                                    id: result.data, // result.data 是后端返回的 ID
+                                    projectId: this.projectId,
+                                    currentName: this.saveForm.name,
+                                    planBuildingName: this.saveForm.plan
+                                }, { headers: authHeader });
+                            }
+                            // 没选计划，直接通过
+                            return Promise.resolve({ data: { code: 200 } });
+                        } else {
+                            throw new Error(result.message || "围栏保存失败");
+                        }
+                    }).then(res => {
+                        if((res.data.code || res.data.status) === 200) {
+                            this.$message.success("保存成功！");
+                            this.saveDialogVisible = false;
+                            loadExistingBuildings(); // 刷新底图
+                            resetSelection();        // 清空当前画笔
+                        }
+                    }).catch(err => {
+                        this.$message.error(err.message || "请求失败");
+                    }).finally(() => {
+                        this.saving = false;
+                    });
+                }
+            },
+
+            // 删除楼栋
+            deleteCurrentBuilding() {
+                const token = localStorage.getItem('token');
+                axios.delete(`/api/buildings/${this.currentEditId}`, {
+                    headers: { 'Authorization': token ? 'Bearer ' + token : '' }
+                }).then(res => {
+                    if((res.data.code || res.data.status) === 200) {
+                        this.$message.success("楼栋已删除");
+                        this.saveDialogVisible = false;
+                        loadExistingBuildings(); // 刷新
+                    } else {
+                        this.$message.error("删除失败");
+                    }
+                });
+            }
         }
     });
 
     // ==========================================
-    // 3. 核心业务逻辑 (复用之前验证成功的代码)
+    // 3. 原生 JS 逻辑 (负责 Canvas 绘图与数据加载)
     // ==========================================
     let allPhotos = [];
     let selectedPhotos = [];
-    let existingBuildings = [];
+    let existingBuildings = []; // 已保存的楼栋
     let folderNames = new Set();
 
-    // 处理 Token
     let token = localStorage.getItem('token');
     if (token && !token.startsWith('Bearer ')) token = 'Bearer ' + token;
 
-    // 同步状态给 Vue (用于显示/隐藏空提示)
     function updateVueState() {
         if(window.vueInstance) window.vueInstance.selectedPhotos = selectedPhotos;
     }
 
     async function initPage() {
         await loadPhotos();
-        await loadExistingBuildings();
+        await loadExistingBuildings(); // 加载底图
     }
 
+    // 加载左侧照片列表
     async function loadPhotos() {
         const projectId = localStorage.getItem('currentProjectId') || 1;
         const listDiv = document.getElementById('photo-list');
-        listDiv.innerHTML = '<div style="text-align:center;margin-top:20px;color:#999"><i class="el-icon-loading"></i> 加载中...</div>';
+        listDiv.innerHTML = '<div style="text-align:center;margin-top:20px;color:#999"><i class="el-icon-loading"></i> 正在加载照片...</div>';
 
         try {
             const res = await fetch(`/api/projects/${projectId}/photos`, {
@@ -248,23 +612,20 @@
             });
             const json = await res.json();
 
-            // ✅ 核心修复：兼容 status/code
-            const code = json.code !== undefined ? json.code : json.status;
-
-            if (code === 200 && json.data) {
+            if ((json.code || json.status) === 200 && json.data) {
                 allPhotos = json.data;
                 extractFolders(allPhotos);
-                filterPhotosByFolder();
+                filterPhotosByFolder(); // 默认显示全部
             } else {
-                listDiv.innerHTML = `<p style="padding:10px; color:#ea5455; text-align:center;">${json.message || '加载失败'}</p>`;
-                document.getElementById('folderSelect').innerHTML = '<option value="all">无数据</option>';
+                listDiv.innerHTML = '<p style="text-align:center">加载失败</p>';
             }
         } catch (e) {
             console.error(e);
-            listDiv.innerHTML = '<p style="padding:10px; color:#ea5455; text-align:center;">网络请求错误</p>';
+            listDiv.innerHTML = '<p style="text-align:center">网络错误</p>';
         }
     }
 
+    // 提取文件夹名
     function extractFolders(photos) {
         folderNames.clear();
         const select = document.getElementById('folderSelect');
@@ -275,145 +636,199 @@
                 const parts = decodeURIComponent(p.photoUrl).split('/');
                 if (parts.length >= 3) {
                     let folder = parts[parts.length - 2];
-                    // 过滤大疆生成的子文件夹
-                    if (['Remote-Control','origin','Photos'].includes(folder)) folder = parts[parts.length - 3];
+                    if (['Remote-Control', 'origin', 'Photos'].includes(folder)) {
+                        folder = parts[parts.length - 3];
+                    }
                     if (folder && folder !== 'projects') folderNames.add(folder);
                 }
             }
         });
 
-        folderNames.forEach(folder => {
+        folderNames.forEach(f => {
             const op = document.createElement('option');
-            op.value = folder; op.innerText = "📁 " + folder;
+            op.value = f;
+            op.innerText = "📁 " + f;
             select.appendChild(op);
         });
 
-        // 默认选中第一个
-        if (folderNames.size > 0) select.value = folderNames.values().next().value;
+        // 默认选中第一个文件夹
+        if (folderNames.size > 0) {
+            select.value = folderNames.values().next().value;
+        }
     }
 
     function filterPhotosByFolder() {
         const sel = document.getElementById('folderSelect').value;
-        const filtered = (sel === 'all') ? allPhotos : allPhotos.filter(p => decodeURIComponent(p.photoUrl||'').includes(sel));
+        const filtered = (sel === 'all')
+            ? allPhotos
+            : allPhotos.filter(p => decodeURIComponent(p.photoUrl || '').includes(sel));
         renderPhotoList(filtered);
     }
 
     function renderPhotoList(photos) {
         const listDiv = document.getElementById('photo-list');
         listDiv.innerHTML = '';
-        if (photos.length === 0) { listDiv.innerHTML = '<p style="text-align:center;color:#666;margin-top:20px">暂无照片</p>'; return; }
+
+        if (photos.length === 0) {
+            listDiv.innerHTML = '<p style="text-align:center;color:#666">该目录下暂无照片</p>';
+            return;
+        }
 
         photos.forEach(p => {
-            if(!p.gpsLat) return;
+            if(!p.gpsLat) return; // 没坐标的不显示
+
             const isChecked = selectedPhotos.some(s => s.id == p.id) ? 'checked' : '';
             const name = p.photoUrl ? p.photoUrl.split('/').pop() : '未知文件';
 
             const div = document.createElement('div');
             div.className = 'photo-item';
             div.innerHTML = `
-                <input type="checkbox" style="margin-right:10px; transform:scale(1.2);" ${isChecked} onchange="togglePhoto('${p.id}', ${p.gpsLat}, ${p.gpsLng}, this)">
+                <input type="checkbox" style="margin-right:10px" ${isChecked} onchange="togglePhoto('${p.id}', ${p.gpsLat}, ${p.gpsLng}, this)">
                 <img src="${p.photoUrl}" onerror="this.src='https://via.placeholder.com/60/333/999?text=IMG'">
                 <div class="photo-info">
                     <span class="photo-name" title="${name}">${name}</span>
-                    <div style="color:var(--text-secondary)">📅 ${p.shootTime ? p.shootTime.replace('T',' ') : '-'}</div>
-                </div>`;
+                </div>
+            `;
             listDiv.appendChild(div);
         });
     }
 
+    // 加载已存在的围栏 (作为底图)
     async function loadExistingBuildings() {
         const pid = localStorage.getItem('currentProjectId') || 1;
         try {
-            const res = await fetch(`/api/buildings/list?projectId=${pid}`, { headers: { 'Authorization': token } });
+            const res = await fetch(`/api/buildings/list?projectId=${pid}`, {
+                headers: { 'Authorization': token }
+            });
             const json = await res.json();
-            if ((json.code||json.status) === 200) { existingBuildings = json.data; drawCanvas(); }
-        } catch(e){}
+            if ((json.code || json.status) === 200) {
+                existingBuildings = json.data;
+                drawCanvas(); // 重绘
+            }
+        } catch(e) {}
     }
 
     window.togglePhoto = function(id, lat, lng, cb) {
-        if(cb.checked) selectedPhotos.push({id, lat, lng}); else selectedPhotos = selectedPhotos.filter(p=>p.id!=id);
-        updateVueState(); drawCanvas();
+        if(cb.checked) {
+            selectedPhotos.push({id, lat, lng});
+        } else {
+            selectedPhotos = selectedPhotos.filter(p => p.id != id);
+        }
+        updateVueState();
+        drawCanvas();
     }
 
     window.resetSelection = function() {
         selectedPhotos = [];
-        document.querySelectorAll('#photo-list input').forEach(c=>c.checked=false);
-        updateVueState(); drawCanvas();
+        // 取消所有勾选框
+        document.querySelectorAll('#photo-list input').forEach(c => c.checked = false);
+        updateVueState();
+        drawCanvas();
     }
 
+    // 核心绘图函数
     window.drawCanvas = function() {
         const container = document.getElementById('canvas-container');
         document.querySelectorAll('.point-marker').forEach(e => e.remove());
-        const svg = document.getElementById('svg-layer');
-        const existSvg = document.getElementById('svg-existing-layer');
-        svg.innerHTML = ''; existSvg.innerHTML = '';
 
-        let lats = selectedPhotos.map(p=>p.lat), lngs = selectedPhotos.map(p=>p.lng);
+        const svg = document.getElementById('svg-layer'); // 动态层
+        const existSvg = document.getElementById('svg-existing-layer'); // 底图层
+        svg.innerHTML = '';
+        existSvg.innerHTML = '';
+
+        // 1. 计算坐标范围
+        let lats = selectedPhotos.map(p => p.lat);
+        let lngs = selectedPhotos.map(p => p.lng);
+
         existingBuildings.forEach(b => {
-            if(b.boundaryCoords) JSON.parse(b.boundaryCoords).forEach(c=>{lats.push(c.lat);lngs.push(c.lng)});
-        });
-
-        if(lats.length===0) { updateVueState(); return; }
-
-        // 动态缩放
-        const minLat=Math.min(...lats), maxLat=Math.max(...lats), minLng=Math.min(...lngs), maxLng=Math.max(...lngs);
-        const pad = Math.max(maxLat-minLat, maxLng-minLng)*0.1 || 0.0001;
-        const width = container.clientWidth, height = container.clientHeight;
-        const toScreen = (lat, lng) => ({
-            x: ((lng - (minLng-pad)) / ((maxLng+pad)-(minLng-pad))) * width,
-            y: height - ((lat - (minLat-pad)) / ((maxLat+pad)-(minLat-pad))) * height
-        });
-
-        // 画已有楼栋 (绿色虚线)
-        existingBuildings.forEach(b=>{
             if(b.boundaryCoords) {
-                const pts = JSON.parse(b.boundaryCoords).map(c=>{const s=toScreen(c.lat,c.lng);return `${s.x},${s.y}`}).join(' ');
-                const poly = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
-                poly.setAttribute("points", pts);
-                poly.setAttribute("style", "fill:rgba(40, 199, 111, 0.2); stroke:#28c76f; stroke-width:2; stroke-dasharray:5,5;");
-                existSvg.appendChild(poly);
-                const txt = document.createElementNS("http://www.w3.org/2000/svg", "text");
-                const s = toScreen(JSON.parse(b.boundaryCoords)[0].lat, JSON.parse(b.boundaryCoords)[0].lng);
-                txt.setAttribute("x",s.x); txt.setAttribute("y",s.y-10); txt.setAttribute("fill","#28c76f"); txt.textContent=b.name;
-                existSvg.appendChild(txt);
+                JSON.parse(b.boundaryCoords).forEach(c => {
+                    lats.push(c.lat);
+                    lngs.push(c.lng);
+                });
             }
         });
 
-        // 画当前选区 (紫色实线)
-        if(selectedPhotos.length>=2) {
-            const pts = selectedPhotos.map(p=>{const s=toScreen(p.lat,p.lng);return `${s.x},${s.y}`}).join(' ');
+        if(lats.length === 0) {
+            updateVueState();
+            return;
+        }
+
+        const minLat = Math.min(...lats);
+        const maxLat = Math.max(...lats);
+        const minLng = Math.min(...lngs);
+        const maxLng = Math.max(...lngs);
+        const pad = Math.max(maxLat - minLat, maxLng - minLng) * 0.1 || 0.0001;
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+
+        const toScreen = (lat, lng) => ({
+            x: ((lng - (minLng - pad)) / ((maxLng + pad) - (minLng - pad))) * width,
+            y: height - ((lat - (minLat - pad)) / ((maxLat + pad) - (minLat - pad))) * height
+        });
+
+        // 2. 绘制已存在的楼栋 (绿色虚线)
+        existingBuildings.forEach(b => {
+            if(b.boundaryCoords) {
+                const pts = JSON.parse(b.boundaryCoords).map(c => {
+                    const s = toScreen(c.lat, c.lng);
+                    return `${s.x},${s.y}`;
+                }).join(' ');
+
+                // ✅ 绑定点击事件，触发编辑
+                const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+                g.onclick = () => { window.vueInstance.openEditDialog(b); };
+
+                const poly = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+                poly.setAttribute("points", pts);
+                poly.setAttribute("class", "building-polygon");
+                poly.setAttribute("style", "fill:rgba(40, 199, 111, 0.1); stroke:#28c76f; stroke-width:1.5; stroke-dasharray:5,5; cursor:pointer; pointer-events:all;");
+
+                const txt = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                const firstPt = toScreen(JSON.parse(b.boundaryCoords)[0].lat, JSON.parse(b.boundaryCoords)[0].lng);
+                txt.setAttribute("x", firstPt.x);
+                txt.setAttribute("y", firstPt.y - 10);
+                txt.setAttribute("fill", "#28c76f");
+                txt.setAttribute("class", "building-label");
+                // 显式设置 pointer-events，并直接绑定点击事件
+                txt.setAttribute("style", "cursor: pointer; pointer-events: bounding-box;");
+                txt.textContent = b.name + " (✏️)";
+
+                // 双重保险：给文字单独绑点击
+                txt.onclick = (e) => {
+                    e.stopPropagation(); // 防止冒泡导致触发两次（如果有的话）
+                    window.vueInstance.openEditDialog(b);
+                };
+
+                g.appendChild(poly);
+                g.appendChild(txt);
+                existSvg.appendChild(g);
+            }
+        });
+
+        // 3. 绘制当前正在画的围栏 (紫色实线)
+        if(selectedPhotos.length >= 2) {
+            const pts = selectedPhotos.map(p => {
+                const s = toScreen(p.lat, p.lng);
+                return `${s.x},${s.y}`;
+            }).join(' ');
+
             const poly = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
             poly.setAttribute("points", pts);
             poly.setAttribute("style", "fill:rgba(115, 103, 240, 0.2); stroke:#7367f0; stroke-width:2;");
             svg.appendChild(poly);
         }
 
-        // 画点
-        selectedPhotos.forEach((p,i)=>{
-            const s = toScreen(p.lat,p.lng);
-            const dot = document.createElement('div'); dot.className='point-marker';
-            dot.style.left=s.x+'px'; dot.style.top=s.y+'px'; dot.innerText=i+1;
-            dot.onclick=()=>{ document.querySelector(`input[onchange*="'${p.id}'"]`).click(); };
+        // 4. 绘制点
+        selectedPhotos.forEach((p, i) => {
+            const s = toScreen(p.lat, p.lng);
+            const dot = document.createElement('div'); dot.className = 'point-marker';
+            dot.style.left = s.x + 'px'; dot.style.top = s.y + 'px'; dot.innerText = i + 1;
+            dot.onclick = () => { document.querySelector(`input[onchange*="'${p.id}'"]`).click(); };
             container.appendChild(dot);
         });
-        updateVueState();
-    }
 
-    window.saveBoundary = async function() {
-        if(selectedPhotos.length<3) { window.vueInstance.$message.warning("至少3个点"); return; }
-        if(!window.vueInstance.buildingName) { window.vueInstance.$message.warning("请输入楼名"); return; }
-        try {
-            const pid = localStorage.getItem('currentProjectId');
-            const res = await fetch(`/api/projects/${pid}/boundary?buildingName=${window.vueInstance.buildingName}`, {
-                method:'POST', headers:{'Content-Type':'application/json','Authorization':token},
-                body:JSON.stringify(selectedPhotos.map(p=>({lat:p.lat,lng:p.lng})))
-            });
-            const json = await res.json();
-            if((json.code||json.status)===200) {
-                window.vueInstance.$message.success("保存成功");
-                loadExistingBuildings(); resetSelection();
-            } else window.vueInstance.$message.error(json.message);
-        } catch(e){ window.vueInstance.$message.error("请求失败"); }
+        updateVueState();
     }
 
     window.onresize = drawCanvas;
