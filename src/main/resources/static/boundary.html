@@ -53,26 +53,28 @@
             background: var(--sidebar-bg);
         }
 
-        /* 拖拽手柄条 */
+        /* 🔴 修复：将拖拽条完全移出侧边栏，避免遮挡滚动条 */
         .resizer {
-            width: 6px;
+            width: 12px; /*稍微加宽，更好抓取*/
             height: 100%;
             background: transparent;
             position: absolute;
-            right: 0;
+            right: -12px; /* 🔴 关键修改：完全移到右侧外部，不占内部空间 */
             top: 0;
             cursor: col-resize;
-            z-index: 20;
+            z-index: 1000; /* 确保在最上层 */
             transition: background 0.2s;
         }
-        .resizer:hover, .resizer.active {
-            background: var(--accent-blue);
+        /* 拖拽时或悬停时显示蓝色提示条 */
+        .resizer:hover, .resizer:active {
+            background: rgba(0, 207, 232, 0.3);
         }
 
         #photo-list {
             flex: 1;
             overflow-y: auto;
             padding: 10px;
+            /* 确保滚动条在右侧边缘 */
         }
 
         /* 滚动条美化 */
@@ -80,6 +82,10 @@
         #photo-list::-webkit-scrollbar-thumb {
             background: rgba(255,255,255,0.2);
             border-radius: 3px;
+        }
+        /* 防止滚动条与内容重叠 */
+        #photo-list::-webkit-scrollbar-track {
+            background: transparent;
         }
 
         .photo-item {
@@ -166,24 +172,19 @@
             box-shadow: inset 0 0 30px rgba(0,0,0,0.5);
         }
 
-        /* 选点标记 (红色圆点) */
+        /* 选点标记 (默认状态：灰色小点) */
         .point-marker {
             position: absolute;
-            width: 14px;
-            height: 14px;
-            background: var(--accent-purple);
             border-radius: 50%;
             transform: translate(-50%, -50%);
             cursor: pointer;
-            border: 2px solid white;
-            box-shadow: 0 0 10px var(--accent-purple);
             z-index: 10;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: white;
             font-size: 10px;
             font-weight: bold;
+            transition: all 0.2s;
         }
 
         /* 空状态提示 */
@@ -237,6 +238,7 @@
             background: transparent !important;
             border: 1px solid var(--text-secondary) !important;
             color: var(--text-secondary) !important;
+            cursor: pointer !important; /* 🔴 强制手型光标 */
         }
         .el-button--default:hover {
             color: var(--accent-blue) !important;
@@ -246,18 +248,27 @@
             background: linear-gradient(45deg, var(--accent-purple), var(--accent-blue)) !important;
             border: none !important;
             color: white !important;
+            cursor: pointer !important; /* 🔴 强制手型光标 */
         }
         .el-button--success {
             background: linear-gradient(45deg, #28c76f, #48da89) !important;
             border: none !important;
             color: white !important;
+            cursor: pointer !important;
         }
         .el-button--danger {
             background: rgba(234, 84, 85, 0.2) !important;
             color: #ea5455 !important;
             border: 1px solid #ea5455 !important;
+            cursor: pointer !important; /* 🔴 强制手型光标 */
         }
         .el-tag--dark { border-color: transparent; }
+
+        /* 防止文字选中，优化按钮体验 */
+        .no-select {
+            user-select: none;
+            -webkit-user-select: none;
+        }
 
         /* =========================================================
            5. 底图交互增强样式 (用于实现点击修改功能)
@@ -293,13 +304,22 @@
         <h3 style="margin:0 0 10px 0; color:var(--text-primary); display:flex; align-items:center;">
             <i class="el-icon-camera-solid" style="margin-right:8px; color:var(--accent-purple);"></i> 拐点照片选择
         </h3>
-        <p style="font-size:12px; color:var(--text-secondary); margin:5px 0 15px 0;">勾选代表建筑物顶角的照片以绘制围栏</p>
+        <p style="font-size:12px; color:var(--text-secondary); margin:5px 0 15px 0;">第一步：勾选代表建筑物顶角的照片<br>第二步：在右侧地图上依次点击点位连线</p>
 
         <div>
             <label style="font-size:12px; color:var(--text-secondary); display:block; margin-bottom:8px;">📂 任务文件夹筛选：</label>
             <select id="folderSelect" style="width:100%; padding:8px; background:#151521; color:white; border:1px solid rgba(255,255,255,0.1); border-radius:4px; outline:none;" onchange="filterPhotosByFolder()">
                 <option value="all">加载中...</option>
             </select>
+        </div>
+
+        <div style="margin-top:10px; display:flex; gap:10px;">
+            <el-button type="primary" size="mini" plain style="width:50%; cursor: pointer !important;" class="no-select" onclick="window.vueInstance.selectAllInFolder()">
+                <i class="el-icon-check"></i> 全选当前
+            </el-button>
+            <el-button type="danger" size="mini" plain style="width:50%; cursor: pointer !important;" class="no-select" onclick="window.vueInstance.clearSelection()">
+                <i class="el-icon-close"></i> 取消全选
+            </el-button>
         </div>
     </div>
 
@@ -323,7 +343,17 @@
         <el-button size="small" icon="el-icon-refresh" @click="initPage">刷新数据</el-button>
         <el-button type="danger" size="small" icon="el-icon-delete" @click="resetSelection" :disabled="selectedPhotos.length===0">清空画布</el-button>
 
-        <el-button type="success" size="small" icon="el-icon-check" @click="openSaveDialog" :disabled="selectedPhotos.length<3">保存围栏</el-button>
+        <el-button type="success" size="small" icon="el-icon-check" @click="openSaveDialog" :disabled="fenceSequence.length<3">保存围栏</el-button>
+
+        <el-button
+            type="primary"
+            size="small"
+            icon="el-icon-cpu"
+            :loading="calculating"
+            @click="handleRecalculate"
+            style="background: var(--accent-purple); border:none;">
+            手动重算进度
+        </el-button>
 
         <el-divider direction="vertical"></el-divider>
         <el-button size="small" icon="el-icon-s-home" @click="goHome">返回首页</el-button>
@@ -332,7 +362,8 @@
     <div id="canvas-container">
         <div class="empty-tip" v-if="selectedPhotos.length === 0">
             <div style="font-size: 60px; margin-bottom: 20px; opacity: 0.3;"><i class="el-icon-edit-outline"></i></div>
-            <p>请在左侧勾选照片，系统将自动连线生成围栏</p>
+            <p>1. 请先在左侧「全选」或勾选照片加载点位</p>
+            <p>2. 然后在地图上依次点击灰色点位进行连线</p>
             <p style="font-size:12px; opacity:0.6; margin-top:10px; color:var(--accent-green);">(提示：点击底图中的绿色楼栋名，可以修改命名或绑定计划)</p>
         </div>
 
@@ -410,11 +441,13 @@
         el: '.main',
         data: {
             projectId: 1,
-            selectedPhotos: [], // 当前选中的照片点
+            selectedPhotos: [], // 🔴 仅用于存储"可见的候选点"(Pool)，不代表连线顺序
+            fenceSequence: [],  // 🔴 新增：用于存储"实际连线的有序ID"(Path)
 
             // 弹窗控制
             saveDialogVisible: false,
             saving: false,
+            calculating: false, // 计算loading状态
 
             // 编辑状态控制
             editMode: false,
@@ -443,10 +476,71 @@
             resetSelection() { resetSelection(); },
             goHome() { window.location.href = 'index.html'; },
 
+            // 手动触发进度计算
+            handleRecalculate() {
+                this.calculating = true;
+                const token = localStorage.getItem('token');
+
+                axios.post(`/api/progress/calculate?projectId=${this.projectId}`, {}, {
+                    headers: { 'Authorization': token ? 'Bearer ' + token : '' }
+                }).then(res => {
+                    if((res.data.code || res.data.status) === 200) {
+                        this.$message.success("进度重算完成！");
+                    } else {
+                        this.$message.error(res.data.message || "计算失败");
+                    }
+                }).catch(err => {
+                    this.$message.error("请求失败");
+                }).finally(() => {
+                    this.calculating = false;
+                });
+            },
+
+            // 🔴 新增：全选当前文件夹下的照片 (只加载点位，不连线)
+            selectAllInFolder() {
+                const sel = document.getElementById('folderSelect').value;
+                // 找出当前筛选后的所有照片
+                const targets = (sel === 'all')
+                    ? window.allPhotos
+                    : window.allPhotos.filter(p => decodeURIComponent(p.photoUrl || '').includes(sel));
+
+                // 将它们全部加入"候选池" (selectedPhotos)，但暂不加入连线
+                // 使用 Map 去重
+                const map = new Map();
+                this.selectedPhotos.forEach(p => map.set(p.id, p));
+                targets.forEach(p => {
+                    if(p.gpsLat) map.set(p.id, { id: p.id, lat: p.gpsLat, lng: p.gpsLng });
+                });
+                this.selectedPhotos = Array.from(map.values());
+
+                // 更新左侧列表勾选状态
+                this.$nextTick(() => {
+                    const checkboxes = document.querySelectorAll('#photo-list input[type="checkbox"]');
+                    checkboxes.forEach(cb => cb.checked = true);
+                });
+
+                // 触发重绘
+                window.drawCanvas();
+                this.$message.success(`已加载 ${targets.length} 个点位到地图，请在地图上点击点位进行连线`);
+            },
+
+            // 🔴 新增：清空所有选择和连线
+            clearSelection() {
+                this.selectedPhotos = [];
+                this.fenceSequence = [];
+
+                // 清空左侧勾选框
+                const checkboxes = document.querySelectorAll('#photo-list input[type="checkbox"]');
+                checkboxes.forEach(cb => cb.checked = false);
+
+                window.drawCanvas();
+            },
+
             // 打开保存对话框 (新增模式)
             openSaveDialog() {
-                if(this.selectedPhotos.length < 3) {
-                    this.$message.warning("电子围栏至少需要 3 个坐标点才能构成闭合区域");
+                // 🔴 修改判断：基于连线数量判断
+                if(this.fenceSequence.length < 3) {
+                    this.$message.warning("请在地图上至少点击连接 3 个点以构成闭合区域");
                     return;
                 }
                 this.editMode = false;
@@ -503,10 +597,9 @@
                 const authHeader = { 'Authorization': token ? 'Bearer ' + token : '', 'Content-Type': 'application/json' };
 
                 if (this.editMode) {
-                    // --- 核心逻辑 1：编辑模式 ---
-                    // 直接调用 bind 接口 (带 ID)，后端会执行更新操作
+                    // --- 核心逻辑 1：编辑模式 (保持不变) ---
                     axios.post('/api/buildings/bind', {
-                        id: this.currentEditId, // 传 ID，确保改名能找到人
+                        id: this.currentEditId,
                         projectId: this.projectId,
                         displayName: this.saveForm.name,
                         planBuildingName: this.saveForm.plan
@@ -523,26 +616,35 @@
                     });
 
                 } else {
-                    // --- 核心逻辑 2：新增模式 ---
-                    const coords = this.selectedPhotos.map(p => ({ lat: p.lat, lng: p.lng }));
+                    // --- 核心逻辑 2：新增模式 (🔴 重构：基于 fenceSequence 排序) ---
 
-                    // 第一步：保存围栏几何信息，拿回 ID
-                    axios.post(`/api/buildings/boundary?projectId=${this.projectId}&buildingName=${this.saveForm.name}`, coords, {
+                    // 构造有序坐标数组
+                    const orderedCoords = this.fenceSequence.map(id => {
+                        const p = this.selectedPhotos.find(item => item.id == id);
+                        return { lat: p.lat, lng: p.lng };
+                    });
+
+                    const payload = {
+                        projectId: this.projectId,
+                        buildingName: this.saveForm.name,
+                        coords: orderedCoords, // 🔴 使用排序后的坐标
+                        photoIds: this.fenceSequence // 🔴 使用排序后的ID
+                    };
+
+                    axios.post('/api/buildings/boundary', payload, {
                         headers: authHeader
                     }).then(res => {
                         const result = res.data;
                         if((result.code || result.status) === 200) {
-                            // 围栏保存成功，检查是否需要绑定计划
+                            const newBuildingId = result.data;
                             if (this.saveForm.plan) {
-                                // 第二步：调用绑定接口 (使用刚拿到的 ID)
                                 return axios.post('/api/buildings/bind', {
-                                    id: result.data, // result.data 是后端返回的 ID
+                                    id: newBuildingId,
                                     projectId: this.projectId,
                                     currentName: this.saveForm.name,
                                     planBuildingName: this.saveForm.plan
                                 }, { headers: authHeader });
                             }
-                            // 没选计划，直接通过
                             return Promise.resolve({ data: { code: 200 } });
                         } else {
                             throw new Error(result.message || "围栏保存失败");
@@ -551,8 +653,8 @@
                         if((res.data.code || res.data.status) === 200) {
                             this.$message.success("保存成功！");
                             this.saveDialogVisible = false;
-                            loadExistingBuildings(); // 刷新底图
-                            resetSelection();        // 清空当前画笔
+                            loadExistingBuildings();
+                            this.clearSelection(); // 🔴 保存后清空
                         }
                     }).catch(err => {
                         this.$message.error(err.message || "请求失败");
@@ -571,7 +673,7 @@
                     if((res.data.code || res.data.status) === 200) {
                         this.$message.success("楼栋已删除");
                         this.saveDialogVisible = false;
-                        loadExistingBuildings(); // 刷新
+                        loadExistingBuildings();
                     } else {
                         this.$message.error("删除失败");
                     }
@@ -584,7 +686,7 @@
     // 3. 原生 JS 逻辑 (负责 Canvas 绘图与数据加载)
     // ==========================================
     let allPhotos = [];
-    let selectedPhotos = [];
+    let selectedPhotos = []; // 原生引用
     let existingBuildings = []; // 已保存的楼栋
     let folderNames = new Set();
 
@@ -614,6 +716,7 @@
 
             if ((json.code || json.status) === 200 && json.data) {
                 allPhotos = json.data;
+                window.allPhotos = allPhotos; // 暴露给 Vue
                 extractFolders(allPhotos);
                 filterPhotosByFolder(); // 默认显示全部
             } else {
@@ -677,7 +780,8 @@
         photos.forEach(p => {
             if(!p.gpsLat) return; // 没坐标的不显示
 
-            const isChecked = selectedPhotos.some(s => s.id == p.id) ? 'checked' : '';
+            // 🔴 修改：勾选状态只反映 selectedPhotos (候选池)
+            const isChecked = window.vueInstance.selectedPhotos.some(s => s.id == p.id) ? 'checked' : '';
             const name = p.photoUrl ? p.photoUrl.split('/').pop() : '未知文件';
 
             const div = document.createElement('div');
@@ -708,38 +812,43 @@
         } catch(e) {}
     }
 
+    // 🔴 修改：勾选/取消勾选 (只管理候选池，不连线)
     window.togglePhoto = function(id, lat, lng, cb) {
         if(cb.checked) {
-            selectedPhotos.push({id, lat, lng});
+            // 加入候选池
+            if(!window.vueInstance.selectedPhotos.some(p => p.id == id)) {
+                window.vueInstance.selectedPhotos.push({id, lat, lng});
+            }
         } else {
-            selectedPhotos = selectedPhotos.filter(p => p.id != id);
+            // 移出候选池，同时也要从连线中移除
+            window.vueInstance.selectedPhotos = window.vueInstance.selectedPhotos.filter(p => p.id != id);
+            window.vueInstance.fenceSequence = window.vueInstance.fenceSequence.filter(fid => fid != id);
         }
-        updateVueState();
         drawCanvas();
     }
 
     window.resetSelection = function() {
-        selectedPhotos = [];
-        // 取消所有勾选框
-        document.querySelectorAll('#photo-list input').forEach(c => c.checked = false);
-        updateVueState();
-        drawCanvas();
+        window.vueInstance.clearSelection();
     }
 
-    // 核心绘图函数
+    // 🔴 核心重写：绘图函数
     window.drawCanvas = function() {
         const container = document.getElementById('canvas-container');
         document.querySelectorAll('.point-marker').forEach(e => e.remove());
 
-        const svg = document.getElementById('svg-layer'); // 动态层
-        const existSvg = document.getElementById('svg-existing-layer'); // 底图层
+        const svg = document.getElementById('svg-layer');
+        const existSvg = document.getElementById('svg-existing-layer');
         svg.innerHTML = '';
         existSvg.innerHTML = '';
 
-        // 1. 计算坐标范围
-        let lats = selectedPhotos.map(p => p.lat);
-        let lngs = selectedPhotos.map(p => p.lng);
+        const candidates = window.vueInstance.selectedPhotos; // 所有可见点
+        const fenceIds = window.vueInstance.fenceSequence;    // 已连线的有序ID
 
+        // 1. 计算坐标范围 (基于所有候选点)
+        let lats = candidates.map(p => p.lat);
+        let lngs = candidates.map(p => p.lng);
+
+        // 也包含底图的范围
         existingBuildings.forEach(b => {
             if(b.boundaryCoords) {
                 JSON.parse(b.boundaryCoords).forEach(c => {
@@ -749,10 +858,7 @@
             }
         });
 
-        if(lats.length === 0) {
-            updateVueState();
-            return;
-        }
+        if(lats.length === 0) return;
 
         const minLat = Math.min(...lats);
         const maxLat = Math.max(...lats);
@@ -767,7 +873,7 @@
             y: height - ((lat - (minLat - pad)) / ((maxLat + pad) - (minLat - pad))) * height
         });
 
-        // 2. 绘制已存在的楼栋 (绿色虚线)
+        // 2. 绘制已存在的楼栋 (绿色虚线) - 保持不变
         existingBuildings.forEach(b => {
             if(b.boundaryCoords) {
                 const pts = JSON.parse(b.boundaryCoords).map(c => {
@@ -775,7 +881,6 @@
                     return `${s.x},${s.y}`;
                 }).join(' ');
 
-                // ✅ 绑定点击事件，触发编辑
                 const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
                 g.onclick = () => { window.vueInstance.openEditDialog(b); };
 
@@ -790,15 +895,9 @@
                 txt.setAttribute("y", firstPt.y - 10);
                 txt.setAttribute("fill", "#28c76f");
                 txt.setAttribute("class", "building-label");
-                // 显式设置 pointer-events，并直接绑定点击事件
                 txt.setAttribute("style", "cursor: pointer; pointer-events: bounding-box;");
                 txt.textContent = b.name + " (✏️)";
-
-                // 双重保险：给文字单独绑点击
-                txt.onclick = (e) => {
-                    e.stopPropagation(); // 防止冒泡导致触发两次（如果有的话）
-                    window.vueInstance.openEditDialog(b);
-                };
+                txt.onclick = (e) => { e.stopPropagation(); window.vueInstance.openEditDialog(b); };
 
                 g.appendChild(poly);
                 g.appendChild(txt);
@@ -806,29 +905,63 @@
             }
         });
 
-        // 3. 绘制当前正在画的围栏 (紫色实线)
-        if(selectedPhotos.length >= 2) {
-            const pts = selectedPhotos.map(p => {
+        // 3. 绘制当前连线 (基于 fenceIds 的顺序) - 🔴 重写部分
+        if(fenceIds.length >= 2) {
+            const pts = fenceIds.map(id => {
+                const p = candidates.find(item => item.id == id);
+                if(!p) return null;
                 const s = toScreen(p.lat, p.lng);
                 return `${s.x},${s.y}`;
-            }).join(' ');
+            }).filter(pt => pt).join(' ');
 
             const poly = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
             poly.setAttribute("points", pts);
-            poly.setAttribute("style", "fill:rgba(115, 103, 240, 0.2); stroke:#7367f0; stroke-width:2;");
+            poly.setAttribute("style", "fill:rgba(115, 103, 240, 0.2); stroke:#7367f0; stroke-width:3; stroke-linejoin:round;");
             svg.appendChild(poly);
         }
 
-        // 4. 绘制点
-        selectedPhotos.forEach((p, i) => {
+        // 4. 绘制所有点 (区分状态) - 🔴 重写部分
+        candidates.forEach(p => {
             const s = toScreen(p.lat, p.lng);
-            const dot = document.createElement('div'); dot.className = 'point-marker';
-            dot.style.left = s.x + 'px'; dot.style.top = s.y + 'px'; dot.innerText = i + 1;
-            dot.onclick = () => { document.querySelector(`input[onchange*="'${p.id}'"]`).click(); };
+            const dot = document.createElement('div');
+
+            // 检查该点是否在 fenceSequence 中
+            const index = fenceIds.indexOf(p.id);
+            const isSelected = index !== -1;
+
+            dot.className = 'point-marker';
+            dot.style.left = s.x + 'px';
+            dot.style.top = s.y + 'px';
+
+            if (isSelected) {
+                // 选中状态：大红点，显示序号
+                dot.innerText = index + 1;
+                dot.style.backgroundColor = '#ea5455'; // 红色
+                dot.style.zIndex = 100;
+                dot.style.transform = 'translate(-50%, -50%) scale(1.2)';
+            } else {
+                // 候选状态：小灰点，无序号
+                dot.innerText = '';
+                dot.style.backgroundColor = '#a2a2b8'; // 灰色
+                dot.style.opacity = 0.6;
+                dot.style.width = '10px';
+                dot.style.height = '10px';
+            }
+
+            // 点击事件：切换选中/未选中
+            dot.onclick = () => {
+                if (isSelected) {
+                    // 已选 -> 移除 (取消连线)
+                    window.vueInstance.fenceSequence.splice(index, 1);
+                } else {
+                    // 未选 -> 加入 (连线到末尾)
+                    window.vueInstance.fenceSequence.push(p.id);
+                }
+                drawCanvas(); // 重绘
+            };
+
             container.appendChild(dot);
         });
-
-        updateVueState();
     }
 
     window.onresize = drawCanvas;

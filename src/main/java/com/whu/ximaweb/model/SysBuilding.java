@@ -26,16 +26,22 @@ public class SysBuilding {
     private String name;
 
     /**
-     * ✅ 新增：绑定的计划进度楼名 (Navisworks中的名字，例如: "12")
-     * 用于关联 plan_progress 表
+     * 绑定的计划进度楼名 (Navisworks中的名字，例如: "12")
      */
     @TableField("plan_building_name")
     private String planBuildingName;
 
     /**
-     * 电子围栏坐标集合 (保持原样，电子围栏功能的核心字段)
+     * 电子围栏坐标集合
      */
     private String boundaryCoords;
+
+    /**
+     * ✅ 必须添加这个字段！
+     * 记录该围栏使用的拐点照片ID (格式: "101,102,103")
+     */
+    @TableField("marker_photo_ids")
+    private String markerPhotoIds;
 
     private LocalDateTime createdAt;
 }

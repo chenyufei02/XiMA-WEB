@@ -9,6 +9,7 @@ import com.whu.ximaweb.mapper.SysProjectMapper;
 import com.whu.ximaweb.service.DjiService;
 import com.whu.ximaweb.service.ObsService;
 import com.whu.ximaweb.service.PhotoProcessor;
+import com.whu.ximaweb.service.ProgressService;
 import com.whu.ximaweb.model.PhotoData;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -20,13 +21,13 @@ import org.springframework.stereotype.Component;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
-import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
 /**
- * 定时任务：自动同步大疆照片
- * 逻辑：每小时执行一次 -> 扫描大疆任务 -> 过滤关键词 -> 保持目录结构上传华为云 -> 解析XMP入库
+ * 定时任务：自动同步大疆照片 + 智能触发进度计算
+ * 完整逻辑：每小时执行 -> 扫描大疆任务 -> 过滤 -> 上传OBS -> 解析XMP(含目标点坐标) -> 入库 -> 触发进度计算
  */
 @Component
 @EnableScheduling
@@ -50,8 +51,10 @@ public class PhotoSyncTask {
     @Autowired
     private PhotoProcessor photoProcessor;
 
-    // 每1小时执行一次 (3600000毫秒)
-    // initialDelay = 10000: 项目启动10秒后先跑一次，方便观察
+    @Autowired
+    private ProgressService progressService;
+
+    // 每1小时执行一次 (3600000毫秒)，启动10秒后初次执行
     @Scheduled(fixedRate = 3600000, initialDelay = 10000)
     public void syncPhotosTask() {
         System.out.println("\n=================================================");
@@ -61,7 +64,7 @@ public class PhotoSyncTask {
         // 1. 获取所有项目
         List<SysProject> projects = sysProjectMapper.selectList(null);
 
-        if (projects.isEmpty()) {
+        if (projects == null || projects.isEmpty()) {
             System.out.println("⚠️ 数据库中没有项目，无需同步。");
             return;
         }
@@ -71,46 +74,55 @@ public class PhotoSyncTask {
                 System.out.println(">>> 正在扫描项目: " + project.getProjectName());
 
                 // 2. 调用大疆API获取符合关键词的文件列表
+                // 如果关键词为空，使用默认空字符串搜索
+                String keyword = project.getPhotoFolderKeyword();
+                if (keyword == null) keyword = "";
+
                 List<DjiMediaFileDto> djiFiles = djiService.getPhotosFromFolder(
                     project.getDjiProjectUuid(),
                     project.getDjiOrgKey(),
-                    project.getPhotoFolderKeyword()
+                    keyword
                 );
 
                 if (djiFiles.isEmpty()) {
-                    System.out.println("    ⚪ 未发现新照片。");
+                    System.out.println("    ⚪ 未发现新照片，跳过后续处理。");
                     continue;
                 }
 
                 System.out.println("    🔥 发现 " + djiFiles.size() + " 张潜在照片，开始处理...");
 
-                int successCount = 0;
+                int successCount = 0; // 记录本轮新增的照片数量
+
                 for (DjiMediaFileDto djiFile : djiFiles) {
                     String fileName = djiFile.getFileName();
 
-                    // 🛑 1. 黑名单过滤
+                    // 🛑 1. 文件名黑名单过滤
                     if ("Remote-Control".equals(fileName)
                             || fileName.endsWith(".MRK") || fileName.endsWith(".NAV")
                             || fileName.endsWith(".OBS") || fileName.endsWith(".RTK")
                             || fileName.endsWith("_D")) {
-                        System.out.println("       ⚪ [静默跳过] 原始数据/文件夹: " + fileName);
+                        // 这些是无关的定位辅助文件，静默跳过
                         continue;
                     }
 
-                    // ✅ 2. 核心补丁：如果文件名没有后缀，强制加上 .JPG
+                    // ✅ 2. 强制后缀名补全 (防止部分文件没有后缀)
                     if (!fileName.toLowerCase().endsWith(".jpg") && !fileName.toLowerCase().endsWith(".jpeg")) {
                         fileName = fileName + ".jpeg";
                     }
 
-                    // 3. 构造路径
+                    // 3. 构造云存储路径
                     String relativePath = djiFile.getFilePath();
-                    if (relativePath.startsWith("/")) relativePath = relativePath.substring(1);
+                    if (relativePath.startsWith("/")) {
+                        relativePath = relativePath.substring(1);
+                    }
                     String objectKey = "projects/" + project.getId() + "/" + relativePath + "/" + fileName;
 
-                    // 4. 查库去重
+                    // 4. 查库去重 (如果数据库已有该路径，直接跳过)
                     QueryWrapper<ProjectPhoto> query = new QueryWrapper<>();
                     query.eq("photo_url", objectKey);
-                    if (projectPhotoMapper.selectCount(query) > 0) continue;
+                    if (projectPhotoMapper.selectCount(query) > 0) {
+                        continue;
+                    }
 
                     System.out.println("    🚀 [新照片] 正在同步: " + fileName);
 
@@ -123,20 +135,36 @@ public class PhotoSyncTask {
 
                         Request request = new Request.Builder().url(djiFile.getDownloadUrl()).get().build();
                         try (Response response = okHttpClient.newCall(request).execute()) {
-                            if (!response.isSuccessful() || response.body() == null) throw new RuntimeException("HTTP " + response.code());
+                            if (!response.isSuccessful() || response.body() == null) {
+                                System.out.println("       ❌ 下载失败: HTTP " + response.code());
+                                continue;
+                            }
+
                             byte[] fileBytes = response.body().bytes();
 
-                            // 6. 上传华为云
-                            if (!obsService.doesObjectExist(project.getObsAk(), project.getObsSk(), project.getObsEndpoint(), project.getObsBucketName(), objectKey)) {
-                                obsService.uploadStream(project.getObsAk(), project.getObsSk(), project.getObsEndpoint(), project.getObsBucketName(), objectKey, new ByteArrayInputStream(fileBytes));
+                            // 6. 上传华为云 OBS
+                            // 先检查是否存在，不存在再上传
+                            boolean existsInObs = obsService.doesObjectExist(
+                                    project.getObsAk(), project.getObsSk(),
+                                    project.getObsEndpoint(), project.getObsBucketName(), objectKey
+                            );
+
+                            if (!existsInObs) {
+                                obsService.uploadStream(
+                                        project.getObsAk(), project.getObsSk(),
+                                        project.getObsEndpoint(), project.getObsBucketName(),
+                                        objectKey, new ByteArrayInputStream(fileBytes)
+                                );
                                 System.out.println("       -> 上传华为云成功");
                             } else {
                                 System.out.println("       -> OBS已存在 (跳过上传)");
                             }
 
-                            // 7. 入库 (核心修改区域)
+                            // 7. 解析 XMP 并入库 (核心修改区域)
                             try (InputStream xmpStream = new ByteArrayInputStream(fileBytes)) {
+                                // 调用 PhotoProcessor 解析
                                 Optional<PhotoData> photoDataOpt = photoProcessor.process(xmpStream, fileName);
+
                                 ProjectPhoto photo = new ProjectPhoto();
                                 photo.setProjectId(project.getId());
                                 photo.setPhotoUrl(objectKey);
@@ -144,30 +172,61 @@ public class PhotoSyncTask {
                                 if (photoDataOpt.isPresent()) {
                                     PhotoData data = photoDataOpt.get();
                                     photo.setShootTime(data.getCaptureTime());
-                                    photo.setGpsLat(java.math.BigDecimal.valueOf(data.getLatitude()));
-                                    photo.setGpsLng(java.math.BigDecimal.valueOf(data.getLongitude()));
-                                    photo.setLaserDistance(java.math.BigDecimal.valueOf(data.getDistance()));
 
-                                    // ✅ 新增：保存无人机绝对飞行高度 (用于 H2 智能推算)
-                                    // 这一步确保了 H2 补全算法所需的核心数据被持久化
-                                    photo.setAbsoluteAltitude(java.math.BigDecimal.valueOf(data.getDroneAbsoluteAltitude()));
+                                    // 存入飞机坐标 (用于地图显示飞机位置)
+                                    photo.setGpsLat(BigDecimal.valueOf(data.getLatitude()));
+                                    photo.setGpsLng(BigDecimal.valueOf(data.getLongitude()));
+
+                                    // ✅ 存入激光目标点坐标 (用于进度计算判定)
+                                    // 如果解析到了有效值 (-1为无效)，则存入
+                                    if (data.getLrfTargetLat() != -1 && data.getLrfTargetLng() != -1) {
+                                        photo.setLrfTargetLat(BigDecimal.valueOf(data.getLrfTargetLat()));
+                                        photo.setLrfTargetLng(BigDecimal.valueOf(data.getLrfTargetLng()));
+                                    }
+
+                                    photo.setLaserDistance(BigDecimal.valueOf(data.getDistance()));
+                                    photo.setAbsoluteAltitude(BigDecimal.valueOf(data.getDroneAbsoluteAltitude()));
+
+                                    // 默认为非拐点，参与计算
+                                    photo.setIsMarker(false);
 
                                     projectPhotoMapper.insert(photo);
                                     successCount++;
-                                    System.out.println("       ✅ 入库成功 (含高度数据)");
+                                    System.out.println("       ✅ 入库成功 (含 LRFTarget 数据)");
                                 } else {
-                                    System.out.println("       ⚠️ 跳过: 无XMP数据");
+                                    // 解析失败也入库，但没有详细数据
+                                    photo.setShootTime(java.time.LocalDateTime.now());
+                                    photo.setIsMarker(false);
+                                    projectPhotoMapper.insert(photo);
+                                    System.out.println("       ⚠️ 入库成功，但无 XMP 数据");
                                 }
                             }
                         }
                     } catch (Exception e) {
                         System.out.println("       ⚪ [跳过] " + fileName + ": " + e.getMessage());
+                        e.printStackTrace();
                     }
                 }
+
                 System.out.println("    ✅ 项目同步完成，新增入库: " + successCount + " 张");
+
+                // ✅ 8. 智能计算触发逻辑
+                if (successCount > 0) {
+                    System.out.println("    ⚡ 监测到有新照片入库，正在触发 [Actual表计算逻辑]...");
+                    try {
+                        progressService.calculateProjectProgress(project.getId());
+                        System.out.println("    ✅ 实际进度 (ActualProgress) 计算并更新完成！");
+                    } catch (Exception e) {
+                        System.err.println("    ❌ 进度计算发生异常: " + e.getMessage());
+                        e.printStackTrace();
+                    }
+                } else {
+                    System.out.println("    💤 本次无新照片，跳过 Actual 表计算以节约资源。");
+                }
 
             } catch (Exception e) {
                 System.err.println("❌ 项目处理异常: " + e.getMessage());
+                e.printStackTrace();
             }
         }
         System.out.println("=================================================\n");

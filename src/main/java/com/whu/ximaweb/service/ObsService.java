@@ -35,4 +35,6 @@ public interface ObsService {
      * 新增：下载文件流 (用于后续解析XMP)
      */
     InputStream downloadFile(String ak, String sk, String endpoint, String bucketName, String objectKey);
+
+
 }

@@ -1,23 +1,29 @@
 package com.whu.ximaweb.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.fasterxml.jackson.core.type.TypeReference;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.whu.ximaweb.dto.ApiResponse;
 import com.whu.ximaweb.dto.Coordinate;
+import com.whu.ximaweb.mapper.ActualProgressMapper;
 import com.whu.ximaweb.mapper.PlanProgressMapper;
 import com.whu.ximaweb.mapper.ProjectPhotoMapper;
 import com.whu.ximaweb.mapper.SysBuildingMapper;
+import com.whu.ximaweb.model.ActualProgress;
 import com.whu.ximaweb.model.ProjectPhoto;
 import com.whu.ximaweb.model.SysBuilding;
+import com.whu.ximaweb.service.ProgressService;
+import lombok.Data;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 楼栋与电子围栏管理控制器
@@ -37,6 +43,12 @@ public class BuildingController {
 
     @Autowired
     private PlanProgressMapper planProgressMapper;
+
+    @Autowired
+    private ActualProgressMapper actualProgressMapper;
+
+    @Autowired
+    private ProgressService progressService;
 
     /**
      * 1. 获取已保存的楼栋围栏列表
@@ -81,42 +93,69 @@ public class BuildingController {
 
     /**
      * 3. 保存用户画好的围栏
-     * ✅ 修改：返回类型改为 ApiResponse<Integer>，返回楼栋ID，方便前端立刻进行绑定
      */
     @PostMapping("/boundary")
-    public ApiResponse<Integer> saveBoundary(
-            @RequestParam Integer projectId,
-            @RequestParam String buildingName,
-            @RequestBody List<Coordinate> coords) {
+    @Transactional(rollbackFor = Exception.class)
+    public ApiResponse<Integer> saveBoundary(@RequestBody BoundarySaveRequest request) {
 
-        if (coords == null || coords.size() < 3) {
+        if (request.getCoords() == null || request.getCoords().size() < 3) {
             return ApiResponse.error("围栏至少需要3个坐标点才能构成闭合区域");
         }
 
         try {
-            String jsonCoords = objectMapper.writeValueAsString(coords);
+            String jsonCoords = objectMapper.writeValueAsString(request.getCoords());
+
+            // 转换照片ID列表为字符串
+            String photoIdsStr = null;
+            if (request.getPhotoIds() != null && !request.getPhotoIds().isEmpty()) {
+                photoIdsStr = request.getPhotoIds().stream()
+                        .map(String::valueOf)
+                        .collect(Collectors.joining(","));
+            }
 
             QueryWrapper<SysBuilding> query = new QueryWrapper<>();
-            query.eq("project_id", projectId);
-            query.eq("name", buildingName);
+            query.eq("project_id", request.getProjectId());
+            query.eq("name", request.getBuildingName());
             SysBuilding building = sysBuildingMapper.selectOne(query);
 
             if (building == null) {
                 // 新增
                 building = new SysBuilding();
-                building.setProjectId(projectId);
-                building.setName(buildingName);
+                building.setProjectId(request.getProjectId());
+                building.setName(request.getBuildingName());
                 building.setBoundaryCoords(jsonCoords);
+                building.setMarkerPhotoIds(photoIdsStr); // ✅ 保存关联ID
                 building.setCreatedAt(LocalDateTime.now());
                 sysBuildingMapper.insert(building);
             } else {
-                // 更新
+                // 更新前，先复位旧的拐点标记
+                if (building.getMarkerPhotoIds() != null && !building.getMarkerPhotoIds().isEmpty()) {
+                    resetPhotosMarker(building.getMarkerPhotoIds());
+                }
+
                 building.setBoundaryCoords(jsonCoords);
+                building.setMarkerPhotoIds(photoIdsStr); // ✅ 更新关联ID
                 sysBuildingMapper.updateById(building);
             }
 
-            // 返回 ID
-            return ApiResponse.success("电子围栏保存成功", building.getId());
+            // 标记新选中的照片为"拐点" (is_marker=1)
+            if (request.getPhotoIds() != null && !request.getPhotoIds().isEmpty()) {
+                ProjectPhoto updatePhoto = new ProjectPhoto();
+                updatePhoto.setIsMarker(true);
+                QueryWrapper<ProjectPhoto> photoQuery = new QueryWrapper<>();
+                photoQuery.in("id", request.getPhotoIds());
+                projectPhotoMapper.update(updatePhoto, photoQuery);
+            }
+
+            // 触发计算
+            try {
+                System.out.println(">>> 围栏更新成功，触发项目 [" + request.getProjectId() + "] 进度重算...");
+                progressService.calculateProjectProgress(request.getProjectId());
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+
+            return ApiResponse.success("电子围栏保存成功，进度已更新", building.getId());
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -124,12 +163,8 @@ public class BuildingController {
         }
     }
 
-    // ==========================================
-    // ✅ 新增功能区 (用于手动绑定 Navisworks 楼名)
-    // ==========================================
-
     /**
-     * 4. 获取该项目下【还未绑定】的 Navisworks 计划楼名
+     * 4. 获取未绑定计划
      */
     @GetMapping("/options/unbound-plans")
     public ApiResponse<List<String>> getUnboundPlans(@RequestParam Integer projectId) {
@@ -138,49 +173,31 @@ public class BuildingController {
     }
 
     /**
-     * 5. 执行绑定 / 更新楼栋信息
-     * ✅ 增强：支持通过 ID 查找（用于改名），也支持通过 Name 查找（用于新建）
+     * 5. 执行绑定
      */
     @PostMapping("/bind")
     public ApiResponse<Object> bindPlan(@RequestBody Map<String, Object> payload) {
-        // 尝试获取 ID (编辑模式会有)
         Integer id = null;
-        if (payload.get("id") != null) {
-            id = Integer.valueOf(payload.get("id").toString());
-        }
-
+        if (payload.get("id") != null) id = Integer.valueOf(payload.get("id").toString());
         Integer projectId = null;
-        if (payload.get("projectId") != null) {
-            projectId = Integer.valueOf(payload.get("projectId").toString());
-        }
+        if (payload.get("projectId") != null) projectId = Integer.valueOf(payload.get("projectId").toString());
         String currentName = (String) payload.get("currentName");
-
         String planName = (String) payload.get("planBuildingName");
-        String displayName = (String) payload.get("displayName"); // 新名称
+        String displayName = (String) payload.get("displayName");
 
         SysBuilding building = null;
-
-        // 1. 优先用 ID 找 (改名必须用 ID)
         if (id != null) {
             building = sysBuildingMapper.selectById(id);
-        }
-        // 2. 没有 ID 用名字找 (新建绑定)
-        else {
+        } else {
             QueryWrapper<SysBuilding> query = new QueryWrapper<>();
             query.eq("project_id", projectId);
             query.eq("name", currentName);
             building = sysBuildingMapper.selectOne(query);
         }
 
-        if (building == null) {
-            return ApiResponse.error("楼栋不存在，请先保存围栏");
-        }
+        if (building == null) return ApiResponse.error("楼栋不存在");
 
-        // 修改名称 (如果用户改了)
-        if (displayName != null && !displayName.isEmpty()) {
-            building.setName(displayName);
-        }
-        // 更新绑定关系
+        if (displayName != null && !displayName.isEmpty()) building.setName(displayName);
         building.setPlanBuildingName(planName);
         sysBuildingMapper.updateById(building);
 
@@ -188,11 +205,59 @@ public class BuildingController {
     }
 
     /**
-     * 6. 删除楼栋
+     * 6. 删除楼栋 (级联删除 + 复位标记)
      */
     @DeleteMapping("/{id}")
+    @Transactional(rollbackFor = Exception.class)
     public ApiResponse<Object> deleteBuilding(@PathVariable Integer id) {
+        SysBuilding building = sysBuildingMapper.selectById(id);
+        if (building == null) return ApiResponse.success("楼栋不存在或已删除");
+
+        // 复位照片标记
+        if (building.getMarkerPhotoIds() != null && !building.getMarkerPhotoIds().isEmpty()) {
+            resetPhotosMarker(building.getMarkerPhotoIds());
+        }
+
+        // 级联删除进度
+        QueryWrapper<ActualProgress> progressQuery = new QueryWrapper<>();
+        progressQuery.eq("building_id", id);
+        actualProgressMapper.delete(progressQuery);
+
+        // 删除楼栋
         sysBuildingMapper.deleteById(id);
+
         return ApiResponse.success("删除成功");
+    }
+
+    /**
+     * 辅助方法：复位照片标记
+     */
+    private void resetPhotosMarker(String photoIdsStr) {
+        try {
+            if (photoIdsStr == null || photoIdsStr.trim().isEmpty()) return;
+
+            // 使用 String.split 可能包含空字符串，需要过滤
+            List<String> idList = Arrays.stream(photoIdsStr.split(","))
+                                        .map(String::trim)
+                                        .filter(s -> !s.isEmpty())
+                                        .collect(Collectors.toList());
+
+            if (!idList.isEmpty()) {
+                UpdateWrapper<ProjectPhoto> updateWrapper = new UpdateWrapper<>();
+                updateWrapper.in("id", idList);
+                updateWrapper.set("is_marker", false);
+                projectPhotoMapper.update(null, updateWrapper);
+            }
+        } catch (Exception e) {
+            System.err.println("复位照片标记失败: " + e.getMessage());
+        }
+    }
+
+    @Data
+    public static class BoundarySaveRequest {
+        private Integer projectId;
+        private String buildingName;
+        private List<Coordinate> coords;
+        private List<Long> photoIds;
     }
 }

@@ -43,13 +43,19 @@ public class ProgressController {
      * 👉 1. 手动触发计算接口 (保留原功能)
      * 作用：让系统根据当前的围栏，把历史所有照片重新跑一遍，算出每一天的进度。
      * 调用方式：POST /api/progress/calculate?projectId=1
+     * 前端调用：在 Dashboard 或 围栏页点击“刷新计算”时调用
      */
     @PostMapping("/calculate")
     public ApiResponse<String> calculateProgress(@RequestParam Integer projectId) {
         try {
+            System.out.println(">>> 收到手动触发计算请求，项目ID: " + projectId);
             long start = System.currentTimeMillis();
+
+            // 调用核心 Service 进行全量计算
             progressService.calculateProjectProgress(projectId);
+
             long end = System.currentTimeMillis();
+            System.out.println(">>> 计算完成，耗时: " + (end - start) + "ms");
             return ApiResponse.success("计算完成！耗时: " + (end - start) + "ms");
         } catch (Exception e) {
             e.printStackTrace();

@@ -14,12 +14,14 @@ import org.springframework.web.bind.annotation.*;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
 /**
  * 【抢救专用】本地文件导入控制器 (幂等版：支持断点续传)
  * 用于将本地硬盘的历史照片补录到系统中，支持H1、H2推算所需的全量元数据
+ * 修改版：增加 LRF 目标点坐标的入库支持
  */
 @RestController
 @RequestMapping("/api/rescue")
@@ -94,8 +96,7 @@ public class RescueController {
                             QueryWrapper<ProjectPhoto> query = new QueryWrapper<>();
                             query.eq("photo_url", objectKey);
                             if (projectPhotoMapper.selectCount(query) > 0) {
-                                // 数据库里有了，直接跳过，保护现有数据ID不变
-                                // System.out.println("   [跳过] 数据库已存在: " + file.getName());
+                                // 数据库里有了，直接跳过
                                 continue;
                             }
 
@@ -121,16 +122,31 @@ public class RescueController {
                                 if (photoDataOpt.isPresent()) {
                                     PhotoData data = photoDataOpt.get();
                                     photo.setShootTime(data.getCaptureTime());
-                                    photo.setGpsLat(java.math.BigDecimal.valueOf(data.getLatitude()));
-                                    photo.setGpsLng(java.math.BigDecimal.valueOf(data.getLongitude()));
-                                    photo.setLaserDistance(java.math.BigDecimal.valueOf(data.getDistance()));
 
-                                    // ✅ 新增：保存绝对高度 (用于 H2 智能推算)
-                                    photo.setAbsoluteAltitude(java.math.BigDecimal.valueOf(data.getDroneAbsoluteAltitude()));
+                                    // 存飞机坐标
+                                    photo.setGpsLat(BigDecimal.valueOf(data.getLatitude()));
+                                    photo.setGpsLng(BigDecimal.valueOf(data.getLongitude()));
+
+                                    // ✅ 新增：存激光测距目标点坐标 (用于判断 H1/H2)
+                                    // PhotoProcessor 如果解析失败会返回 -1，这里做个判断
+                                    if (data.getLrfTargetLat() != -1 && data.getLrfTargetLng() != -1) {
+                                        photo.setLrfTargetLat(BigDecimal.valueOf(data.getLrfTargetLat()));
+                                        photo.setLrfTargetLng(BigDecimal.valueOf(data.getLrfTargetLng()));
+                                        // System.out.println("      -> 捕获目标点坐标: " + data.getLrfTargetLat() + ", " + data.getLrfTargetLng());
+                                    }
+
+                                    photo.setLaserDistance(BigDecimal.valueOf(data.getDistance()));
+
+                                    // 保存绝对高度 (用于 H2 智能推算)
+                                    photo.setAbsoluteAltitude(BigDecimal.valueOf(data.getDroneAbsoluteAltitude()));
+
+                                    // 默认为普通照片，参与计算
+                                    photo.setIsMarker(false);
 
                                     System.out.println("      -> XMP解析成功 (" + data.getCaptureTime() + ")");
                                 } else {
                                     photo.setShootTime(LocalDateTime.now());
+                                    photo.setIsMarker(false);
                                     System.err.println("      -> ⚠️ 无XMP数据");
                                 }
                                 projectPhotoMapper.insert(photo);
@@ -140,6 +156,7 @@ public class RescueController {
 
                         } catch (Exception e) {
                             System.err.println("   ❌ 处理失败 [" + file.getName() + "]: " + e.getMessage());
+                            e.printStackTrace();
                         }
                     }
                 }

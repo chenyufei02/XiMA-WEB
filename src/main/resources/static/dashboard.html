@@ -18,7 +18,11 @@
         /* 1. 顶部导航 */
         .header { height: 60px; display: flex; align-items: center; justify-content: space-between; padding: 0 30px; background: rgba(43, 43, 64, 0.8); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border-color); position: sticky; top: 0; z-index: 100; }
         .page-title { font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
-        .back-btn { cursor: pointer; color: var(--text-secondary); font-size: 14px; transition: color 0.3s; }
+
+        /* ✅ 修改：右侧操作区容器 */
+        .header-controls { display: flex; align-items: center; gap: 15px; }
+
+        .back-btn { cursor: pointer; color: var(--text-secondary); font-size: 14px; transition: color 0.3s; display: flex; align-items: center; gap: 5px;}
         .back-btn:hover { color: var(--accent-blue); }
 
         /* 2. 概览卡片区 */
@@ -67,7 +71,32 @@
         <div class="page-title">
             <i class="el-icon-monitor"></i> {{ dashboardData.projectName || '加载中...' }} - 数据指挥中心
         </div>
-        <div class="back-btn" @click="goHome"><i class="el-icon-back"></i> 返回首页</div>
+
+        <div class="header-controls">
+            <el-button
+                type="primary"
+                size="small"
+                icon="el-icon-cloudy"
+                :loading="syncing"
+                @click="handleSyncDji"
+                style="background: #7367f0; border:none;">
+                同步司空照片
+            </el-button>
+
+            <el-button
+                type="success"
+                size="small"
+                icon="el-icon-refresh"
+                :loading="calculating"
+                @click="handleRecalculate"
+                style="background: #28c76f; border:none;">
+                刷新进度计算
+            </el-button>
+
+            <div class="back-btn" @click="goHome">
+                <i class="el-icon-back"></i> 返回首页
+            </div>
+        </div>
     </div>
 
     <div v-if="loading" style="text-align: center; padding: 100px;">
@@ -160,6 +189,8 @@
         data: {
             projectId: 1,
             loading: true,
+            syncing: false, // ✅ 新增：同步loading状态
+            calculating: false, // ✅ 新增：计算loading状态
             dashboardData: {
                 projectName: '',
                 safeRunDays: 0,
@@ -175,6 +206,51 @@
         },
         methods: {
             goHome() { window.location.href = 'index.html'; },
+
+            // ✅ 新增：手动触发司空2同步
+            handleSyncDji() {
+                this.syncing = true;
+                const token = localStorage.getItem('token');
+
+                // 注意：这里调用的是 /api/projects/{id}/sync 接口
+                // 我们在下一步会确保后端 ProjectController 拥有这个接口
+                axios.post(`/api/projects/${this.projectId}/sync`, {}, {
+                    headers: { 'Authorization': token ? 'Bearer ' + token : '' }
+                }).then(res => {
+                    if((res.data.code || res.data.status) === 200) {
+                        this.$message.success("云端照片同步任务已触发！");
+                        // 同步完成后，通常也意味着可能会有新计算，延迟一下刷新数据
+                        setTimeout(() => this.fetchData(), 2000);
+                    } else {
+                        this.$message.error(res.data.message || "同步指令发送失败");
+                    }
+                }).catch(err => {
+                    this.$message.error("请求失败，请检查网络");
+                }).finally(() => {
+                    this.syncing = false;
+                });
+            },
+
+            // ✅ 新增：手动触发进度计算
+            handleRecalculate() {
+                this.calculating = true;
+                const token = localStorage.getItem('token');
+
+                axios.post(`/api/progress/calculate?projectId=${this.projectId}`, {}, {
+                    headers: { 'Authorization': token ? 'Bearer ' + token : '' }
+                }).then(res => {
+                    if((res.data.code || res.data.status) === 200) {
+                        this.$message.success("进度重算完成！");
+                        this.fetchData(); // 刷新页面数据
+                    } else {
+                        this.$message.error(res.data.message || "计算失败");
+                    }
+                }).catch(err => {
+                    this.$message.error("请求失败");
+                }).finally(() => {
+                    this.calculating = false;
+                });
+            },
 
             fetchData() {
                 const token = localStorage.getItem('token');
@@ -207,7 +283,7 @@
                     chartTrend.setOption({
                         tooltip: { trigger: 'axis' },
                         legend: { data: ['计划', '实际'], textStyle: { color: '#a2a2b8' }, bottom: 0 },
-                        grid: { top: 30, bottom: 30, left: 40, right: 20 },
+                        grid: { top: 30, bottom: 60, left: 40, right: 20 },
                         xAxis: { type: 'category', data: b.dates, axisLine: { lineStyle: { color: '#555' } } },
                         yAxis: { type: 'value', splitLine: { lineStyle: { color: '#333' } } },
                         series: [
