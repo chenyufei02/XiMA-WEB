@@ -356,6 +356,8 @@
         </el-button>
 
         <el-divider direction="vertical"></el-divider>
+
+        <el-button size="small" icon="el-icon-back" @click="goBack" v-if="isProjectMode">返回看板</el-button>
         <el-button size="small" icon="el-icon-s-home" @click="goHome">返回首页</el-button>
     </div>
 
@@ -458,12 +460,18 @@
             saveForm: {
                 name: '',
                 plan: ''
-            }
+            },
+
+            // ✅ 新增：侧边栏模式判断
+            isProjectMode: false
         },
         mounted() {
             // 从 LocalStorage 获取当前项目ID
             const pid = localStorage.getItem('currentProjectId');
+            const fromDash = localStorage.getItem('fromDashboard');
+
             if(pid) this.projectId = pid;
+            if(fromDash === 'true') this.isProjectMode = true;
 
             // 暴露给全局以便原生JS调用
             window.vueInstance = this;
@@ -474,7 +482,15 @@
         methods: {
             initPage() { initPage(); },
             resetSelection() { resetSelection(); },
-            goHome() { window.location.href = 'index.html'; },
+
+            // ✅ 返回逻辑
+            goHome() {
+                localStorage.removeItem('fromDashboard');
+                window.location.href = 'index.html';
+            },
+            goBack() {
+                window.location.href = 'dashboard.html';
+            },
 
             // 手动触发进度计算
             handleRecalculate() {

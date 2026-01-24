@@ -2,178 +2,522 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>项目指挥中心 - XiMA 智造</title>
     <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <style>
+        /* --- 1. 全局变量与基础样式 --- */
         :root {
-            --bg-color: #1e1e2d; --card-bg: #2b2b40;
-            --text-primary: #e1e1e6; --text-secondary: #a2a2b8;
-            --accent-purple: #7367f0; --accent-blue: #00cfe8;
-            --accent-green: #28c76f; --accent-red: #ea5455; --accent-yellow: #ff9f43;
+            --bg-color: #1e1e2d;
+            --sidebar-bg: #151521;
+            --card-bg: #2b2b40;
+            --text-primary: #e1e1e6;
+            --text-secondary: #a2a2b8;
+            --text-muted: #6c6c80;
+            --accent-purple: #7367f0;
+            --accent-blue: #00cfe8;
+            --accent-green: #28c76f;
+            --accent-red: #ea5455;
+            --accent-yellow: #ff9f43;
             --border-color: rgba(255,255,255,0.08);
+            --header-height: 70px;
+            --sidebar-width: 240px;
+            --transition-speed: 0.3s;
         }
-        body { margin: 0; background-color: var(--bg-color); color: var(--text-primary); font-family: 'Segoe UI', sans-serif; overflow-x: hidden; }
 
-        /* 1. 顶部导航 */
-        .header { height: 60px; display: flex; align-items: center; justify-content: space-between; padding: 0 30px; background: rgba(43, 43, 64, 0.8); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border-color); position: sticky; top: 0; z-index: 100; }
-        .page-title { font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            overflow: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
 
-        /* ✅ 修改：右侧操作区容器 */
-        .header-controls { display: flex; align-items: center; gap: 15px; }
+        #app {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+        }
 
-        .back-btn { cursor: pointer; color: var(--text-secondary); font-size: 14px; transition: color 0.3s; display: flex; align-items: center; gap: 5px;}
-        .back-btn:hover { color: var(--accent-blue); }
+        /* --- 2. 侧边栏样式 (SideBar) --- */
+        .sidebar {
+            width: var(--sidebar-width);
+            background-color: var(--sidebar-bg);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            z-index: 100;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.2);
+            transition: width var(--transition-speed);
+        }
 
-        /* 2. 概览卡片区 */
-        .overview-row { display: flex; gap: 20px; padding: 30px; max-width: 1400px; margin: 0 auto; }
-        .stat-card { flex: 1; background: var(--card-bg); padding: 25px; border-radius: 12px; display: flex; align-items: center; gap: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.2); border: 1px solid var(--border-color); position: relative; overflow: hidden; }
-        .stat-card::after { content: ''; position: absolute; right: 0; top: 0; bottom: 0; width: 4px; background: var(--accent-blue); }
-        .stat-card.danger::after { background: var(--accent-red); }
-        .stat-card.success::after { background: var(--accent-green); }
+        /* [修改] 项目标题区域：允许换行，解决长标题截断问题 */
+        .project-title-area {
+            min-height: var(--header-height);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--accent-blue);
+            padding: 10px 15px; /* 增加上下内边距 */
+            font-size: 16px;
+            letter-spacing: 0.5px;
+            cursor: default;
+            /* 修改：允许换行 */
+            white-space: normal;
+            line-height: 1.3;
+            text-align: center;
+            background: rgba(0,0,0,0.1);
+        }
 
-        .stat-icon { width: 50px; height: 50px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 24px; background: rgba(255,255,255,0.05); }
-        .stat-info h3 { margin: 0 0 5px 0; font-size: 28px; color: var(--text-primary); }
-        .stat-info p { margin: 0; font-size: 13px; color: var(--text-secondary); }
+        .project-title-area i {
+            margin-right: 8px;
+            font-size: 20px;
+            flex-shrink: 0; /* 防止图标被压缩 */
+        }
 
-        /* 3. 楼栋卡片矩阵 */
-        .building-container { padding: 0 30px 50px 30px; max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 30px; }
+        .nav-menu {
+            flex: 1;
+            padding: 20px 15px;
+            overflow-y: auto;
+        }
 
-        .building-card { background: var(--card-bg); border-radius: 12px; border: 1px solid var(--border-color); overflow: hidden; }
+        .nav-item {
+            display: flex;
+            align-items: center;
+            padding: 14px 18px;
+            border-radius: 8px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s ease-in-out;
+            border-left: 3px solid transparent;
+        }
+
+        .nav-item:hover {
+            background-color: rgba(255,255,255,0.05);
+            color: #fff;
+            transform: translateX(5px);
+        }
+
+        .nav-item.active {
+            background: linear-gradient(90deg, rgba(115, 103, 240, 0.15), transparent);
+            color: var(--accent-purple);
+            border-left-color: var(--accent-purple);
+        }
+
+        .nav-item i {
+            margin-right: 15px;
+            font-size: 18px;
+            width: 20px;
+            text-align: center;
+        }
+
+        /* --- 3. 右侧主内容区 (Main Content) --- */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+            min-width: 0;
+            background-image: radial-gradient(circle at 10% 10%, rgba(40,40,55,0.5) 0%, transparent 20%);
+        }
+
+        /* 顶部 Header */
+        .header {
+            height: var(--header-height);
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding: 0 40px;
+            background: rgba(30, 30, 45, 0.95);
+            border-bottom: 1px solid var(--border-color);
+            backdrop-filter: blur(10px);
+            z-index: 50;
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        /* 内容滚动容器 */
+        .scroll-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 30px 40px;
+            scroll-behavior: smooth;
+        }
+
+        /* --- 4. 统计卡片区 (Stats Cards) --- */
+        .overview-row {
+            display: flex;
+            gap: 25px;
+            margin-bottom: 35px;
+        }
+
+        .stat-card {
+            flex: 1;
+            background: var(--card-bg);
+            padding: 25px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.3s, box-shadow 0.3s;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        /* 卡片侧边彩色条 */
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+        }
+        .stat-card.purple::before { background-color: var(--accent-purple); }
+        .stat-card.red::before { background-color: var(--accent-red); }
+        .stat-card.green::before { background-color: var(--accent-green); }
+        .stat-card.blue::before { background-color: var(--accent-blue); }
+
+        .stat-icon-box {
+            width: 56px;
+            height: 56px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            background: rgba(255,255,255,0.05);
+        }
+
+        .stat-info h3 {
+            margin: 0 0 5px 0;
+            font-size: 28px;
+            font-weight: 700;
+            color: #fff;
+            line-height: 1.2;
+        }
+
+        .stat-info small {
+            font-size: 14px;
+            color: var(--text-muted);
+            font-weight: normal;
+            margin-left: 5px;
+        }
+
+        .stat-info p {
+            margin: 0;
+            font-size: 13px;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        /* --- 5. 楼栋详情卡片 (Building Cards) --- */
+        .building-container {
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+            padding-bottom: 50px;
+        }
+
+        .building-card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            transition: all 0.3s;
+        }
+
+        .building-card:hover {
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            border-color: rgba(115, 103, 240, 0.3);
+        }
 
         /* 卡片头部 */
-        .b-header { padding: 20px 25px; background: rgba(0,0,0,0.2); border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
-        .b-title { font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
-        .b-meta { font-size: 13px; color: var(--text-secondary); display: flex; gap: 20px; }
+        .b-header {
+            padding: 20px 30px;
+            background: rgba(0,0,0,0.2);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
 
-        /* 状态标签 */
-        .status-badge { padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; display: flex; align-items: center; gap: 6px; }
-        .status-danger { background: rgba(234, 84, 85, 0.15); color: var(--accent-red); }
-        .status-success { background: rgba(40, 199, 111, 0.15); color: var(--accent-green); }
-        .status-warning { background: rgba(255, 159, 67, 0.15); color: var(--accent-yellow); }
-        .status-primary { background: rgba(115, 103, 240, 0.15); color: var(--accent-purple); }
+        .b-title {
+            font-size: 18px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            color: #fff;
+        }
 
-        /* 图表区域 (Grid Layout 1x3) */
-        .charts-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; height: 320px; }
-        .chart-box { position: relative; border-right: 1px solid var(--border-color); padding: 15px; }
-        .chart-box:last-child { border-right: none; }
-        .chart-title { font-size: 12px; color: var(--text-secondary); margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; }
-        .chart-container { width: 100%; height: 260px; }
+        .b-meta {
+            font-size: 13px;
+            color: var(--text-secondary);
+            display: flex;
+            gap: 25px;
+            align-items: center;
+        }
 
-        /* Element UI 覆盖 */
-        .el-loading-mask { background-color: rgba(30,30,45,0.9); }
+        .b-meta span {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .b-meta i { color: var(--accent-purple); }
+
+        /* 状态徽章 */
+        .status-badge {
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .status-danger { background: rgba(234, 84, 85, 0.15); color: var(--accent-red); border: 1px solid rgba(234, 84, 85, 0.2); }
+        .status-success { background: rgba(40, 199, 111, 0.15); color: var(--accent-green); border: 1px solid rgba(40, 199, 111, 0.2); }
+        .status-warning { background: rgba(255, 159, 67, 0.15); color: var(--accent-yellow); border: 1px solid rgba(255, 159, 67, 0.2); }
+        .status-primary { background: rgba(115, 103, 240, 0.15); color: var(--accent-purple); border: 1px solid rgba(115, 103, 240, 0.2); }
+        .status-info { background: rgba(0, 207, 232, 0.15); color: var(--accent-blue); border: 1px solid rgba(0, 207, 232, 0.2); }
+
+        /* 图表容器 */
+        .charts-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            border-top: 1px solid rgba(255,255,255,0.02);
+        }
+
+        .chart-box {
+            height: 320px;
+            padding: 20px;
+            position: relative;
+            border-right: 1px solid var(--border-color);
+        }
+
+        .chart-box:last-child {
+            border-right: none;
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-left: 10px;
+            border-left: 3px solid var(--accent-blue);
+        }
+
+        .chart-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .chart-subtitle {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .chart-container {
+            width: 100%;
+            height: 260px;
+        }
+
+        /* --- 6. Element UI 覆盖与 Loading --- */
+        .el-loading-mask { background-color: rgba(30, 30, 45, 0.9); }
+        .el-button--primary { background: linear-gradient(45deg, #7367f0, #9e95f5); border: none; box-shadow: 0 4px 10px rgba(115, 103, 240, 0.3); }
+        .el-button--primary:hover { box-shadow: 0 6px 15px rgba(115, 103, 240, 0.5); transform: translateY(-1px); }
+        .el-button--success { background: linear-gradient(45deg, #28c76f, #48da89); border: none; box-shadow: 0 4px 10px rgba(40, 199, 111, 0.3); }
+        .el-button--success:hover { box-shadow: 0 6px 15px rgba(40, 199, 111, 0.5); transform: translateY(-1px); }
+
+        /* 空状态 */
+        .empty-state {
+            text-align: center;
+            padding: 80px 0;
+            color: var(--text-muted);
+        }
+        .empty-state i { font-size: 48px; margin-bottom: 20px; opacity: 0.5; }
+        .empty-state p { font-size: 16px; }
+
     </style>
 </head>
 <body>
 
 <div id="app">
-    <div class="header">
-        <div class="page-title">
-            <i class="el-icon-monitor"></i> {{ dashboardData.projectName || '加载中...' }} - 数据指挥中心
+    <div class="sidebar">
+        <div class="project-title-area" :title="dashboardData.projectName">
+            <i class="el-icon-office-building"></i>
+            <span>{{ dashboardData.projectName || '正在加载...' }}</span>
         </div>
 
-        <div class="header-controls">
-            <el-button
-                type="primary"
-                size="small"
-                icon="el-icon-cloudy"
-                :loading="syncing"
-                @click="handleSyncDji"
-                style="background: #7367f0; border:none;">
-                同步司空照片
-            </el-button>
-
-            <el-button
-                type="success"
-                size="small"
-                icon="el-icon-refresh"
-                :loading="calculating"
-                @click="handleRecalculate"
-                style="background: #28c76f; border:none;">
-                刷新进度计算
-            </el-button>
-
-            <div class="back-btn" @click="goHome">
-                <i class="el-icon-back"></i> 返回首页
+        <div class="nav-menu">
+            <div class="nav-item active">
+                <i class="el-icon-data-board"></i> 数据看板
+            </div>
+            <div class="nav-item" @click="goToConfig('boundary')">
+                <i class="el-icon-map-location"></i> 电子围栏
+            </div>
+            <div class="nav-item" @click="goToConfig('floor')">
+                <i class="el-icon-office-building"></i> 楼层配置
+            </div>
+            <div class="nav-item" @click="goToConfig('plan')">
+                <i class="el-icon-date"></i> 计划进度
             </div>
         </div>
     </div>
 
-    <div v-if="loading" style="text-align: center; padding: 100px;">
-        <i class="el-icon-loading" style="font-size: 40px; color: var(--accent-purple);"></i>
-        <p style="color: var(--text-secondary); margin-top: 20px;">正在从星际链路拉取数据...</p>
-    </div>
+    <div class="main-content">
+        <div class="header">
+            <div style="flex:1">
+               <el-button
+                    size="small"
+                    icon="el-icon-s-home"
+                    @click="goHome"
+                    style="background: transparent; border: 1px solid var(--text-secondary); color: var(--text-secondary);">
+                    返回系统首页
+                </el-button>
+            </div>
 
-    <div v-else>
-        <div class="overview-row">
-            <div class="stat-card">
-                <div class="stat-icon" style="color: var(--accent-purple)"><i class="el-icon-time"></i></div>
-                <div class="stat-info">
-                    <h3>{{ dashboardData.safeRunDays }} <small style="font-size:14px;color:#a2a2b8">天</small></h3>
-                    <p>安全运行天数</p>
-                </div>
-            </div>
-            <div class="stat-card danger">
-                <div class="stat-icon" style="color: var(--accent-red)"><i class="el-icon-warning-outline"></i></div>
-                <div class="stat-info">
-                    <h3>{{ dashboardData.delayedCount }} <small style="font-size:14px;color:#a2a2b8">栋</small></h3>
-                    <p>滞后预警</p>
-                </div>
-            </div>
-            <div class="stat-card success">
-                <div class="stat-icon" style="color: var(--accent-green)"><i class="el-icon-circle-check"></i></div>
-                <div class="stat-info">
-                    <h3>{{ dashboardData.normalCount }} <small style="font-size:14px;color:#a2a2b8">栋</small></h3>
-                    <p>进度正常</p>
-                </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon" style="color: var(--accent-blue)"><i class="el-icon-camera"></i></div>
-                <div class="stat-info">
-                    <h3 style="font-size: 18px;">{{ dashboardData.lastUpdateDate }}</h3>
-                    <p>最近飞测进度时间</p>
-                </div>
+            <div class="header-controls">
+                <el-button
+                    type="primary"
+                    size="small"
+                    icon="el-icon-cloudy"
+                    :loading="syncing"
+                    @click="handleSyncDji">
+                    同步司空照片
+                </el-button>
+                <el-button
+                    type="success"
+                    size="small"
+                    icon="el-icon-refresh"
+                    :loading="calculating"
+                    @click="handleRecalculate">
+                    刷新进度计算
+                </el-button>
             </div>
         </div>
 
-        <div class="building-container">
-            <div v-for="(b, index) in dashboardData.buildings" :key="b.buildingId" class="building-card">
-                <div class="b-header">
-                    <div class="b-title">
-                        {{ b.buildingName }}
-                        <span v-if="b.planName" style="font-size:12px; color:var(--text-secondary); font-weight:normal">
-                            (模型: {{b.planName}})
-                        </span>
-                        <div :class="['status-badge', 'status-' + b.statusColor]">
-                            <i :class="b.statusColor === 'danger' ? 'el-icon-warning' : (b.statusColor === 'warning' ? 'el-icon-timer' : 'el-icon-success')"></i>
-                            {{ b.statusTag }}
+        <div class="scroll-container">
+
+            <div v-if="loading" style="height: 400px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-secondary);">
+                <i class="el-icon-loading" style="font-size: 40px; color: var(--accent-purple); margin-bottom: 20px;"></i>
+                <p>正在从星际链路拉取实时数据...</p>
+            </div>
+
+            <div v-else>
+                <div class="overview-row">
+                    <div class="stat-card purple">
+                        <div class="stat-icon-box" style="color:var(--accent-purple)"><i class="el-icon-time"></i></div>
+                        <div class="stat-info">
+                            <h3>{{ dashboardData.safeRunDays }}<small>天</small></h3>
+                            <p>安全运行天数</p>
                         </div>
                     </div>
-                    <div class="b-meta">
-                        <span><i class="el-icon-office-building"></i> 当前: {{ b.currentFloor }} 层</span>
-                        <span><i class="el-icon-s-data"></i> 高度: {{ b.currentHeight ? b.currentHeight.toFixed(1) : 0 }}m</span>
-                        <span><i class="el-icon-date"></i> 更新: {{ b.lastMeasureDate }}</span>
+                    <div class="stat-card red">
+                        <div class="stat-icon-box" style="color:var(--accent-red)"><i class="el-icon-warning-outline"></i></div>
+                        <div class="stat-info">
+                            <h3>{{ dashboardData.delayedCount }}<small>栋</small></h3>
+                            <p>滞后预警楼栋</p>
+                        </div>
+                    </div>
+                    <div class="stat-card green">
+                        <div class="stat-icon-box" style="color:var(--accent-green)"><i class="el-icon-circle-check"></i></div>
+                        <div class="stat-info">
+                            <h3>{{ dashboardData.normalCount }}<small>栋</small></h3>
+                            <p>进度正常楼栋</p>
+                        </div>
+                    </div>
+                    <div class="stat-card blue">
+                        <div class="stat-icon-box" style="color:var(--accent-blue)"><i class="el-icon-camera"></i></div>
+                        <div class="stat-info">
+                            <h3 style="font-size: 20px; line-height: 28px;">{{ formatLastUpdate(dashboardData.lastUpdateDate) }}</h3>
+                            <p>最近飞测时间</p>
+                        </div>
                     </div>
                 </div>
 
-                <div class="charts-row">
-                    <div class="chart-box">
-                        <div class="chart-title"><span>📉 楼层进度对比 (计划 vs 实际)</span></div>
-                        <div :id="'chart-trend-' + index" class="chart-container"></div>
+                <div class="building-container">
+                    <div v-for="(b, index) in dashboardData.buildings" :key="b.buildingId" class="building-card">
+
+                        <div class="b-header">
+                            <div class="b-title">
+                                {{ b.buildingName }}
+                                <span v-if="b.planName" style="font-size:12px; font-weight:normal; color:var(--text-secondary); margin-left: 5px;">
+                                    (模型: {{b.planName}})
+                                </span>
+                                <div :class="['status-badge', getStatusClass(b.statusColor)]">
+                                    <i :class="getStatusIcon(b.statusColor)"></i>
+                                    {{ b.statusTag }}
+                                </div>
+                            </div>
+                            <div class="b-meta">
+                                <span><i class="el-icon-office-building"></i> 当前: {{ b.currentFloor }} 层</span>
+                                <span><i class="el-icon-s-data"></i> 高度: {{ b.currentHeight ? b.currentHeight.toFixed(1) : 0 }}m</span>
+                                <span><i class="el-icon-date"></i> 更新: {{ b.lastMeasureDate }}</span>
+                            </div>
+                        </div>
+
+                        <div class="charts-row">
+                            <div class="chart-box">
+                                <div class="chart-header">
+                                    <span class="chart-title">楼层生长趋势</span>
+                                    <span class="chart-subtitle">计划 vs 实际</span>
+                                </div>
+                                <div :id="'chart-trend-' + index" class="chart-container"></div>
+                            </div>
+                            <div class="chart-box">
+                                <div class="chart-header" style="border-left-color: var(--accent-blue);">
+                                    <span class="chart-title">物理高度生长</span>
+                                    <span class="chart-subtitle">单位：米</span>
+                                </div>
+                                <div :id="'chart-height-' + index" class="chart-container"></div>
+                            </div>
+                            <div class="chart-box">
+                                <div class="chart-header" style="border-left-color: var(--accent-green);">
+                                    <span class="chart-title">进度偏差分析</span>
+                                    <span class="chart-subtitle">正数=超前，负数=滞后</span>
+                                </div>
+                                <div :id="'chart-diff-' + index" class="chart-container"></div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="chart-box">
-                        <div class="chart-title"><span>🏗️ 物理高度生长 (米)</span></div>
-                        <div :id="'chart-height-' + index" class="chart-container"></div>
-                    </div>
-                    <div class="chart-box">
-                        <div class="chart-title"><span>📊 进度偏差量 (层)</span></div>
-                        <div :id="'chart-diff-' + index" class="chart-container"></div>
+
+                    <div v-if="dashboardData.buildings.length === 0" class="empty-state">
+                        <i class="el-icon-document-delete"></i>
+                        <p>暂无楼栋数据，请先点击左侧「电子围栏」进行绑定配置。</p>
+                        <el-button type="primary" size="small" @click="goToConfig('boundary')" style="margin-top: 15px;">前往配置</el-button>
                     </div>
                 </div>
-            </div>
-
-            <div v-if="dashboardData.buildings.length === 0" style="text-align: center; color: var(--text-secondary); padding: 50px;">
-                暂无楼栋数据，请先去「电子围栏」页面绑定楼栋。
             </div>
         </div>
     </div>
@@ -189,8 +533,8 @@
         data: {
             projectId: 1,
             loading: true,
-            syncing: false, // ✅ 新增：同步loading状态
-            calculating: false, // ✅ 新增：计算loading状态
+            syncing: false,
+            calculating: false,
             dashboardData: {
                 projectName: '',
                 safeRunDays: 0,
@@ -200,26 +544,59 @@
             }
         },
         mounted() {
+            // 尝试读取上次的项目ID，如果URL中没有参数，则使用缓存
             const pid = localStorage.getItem('currentProjectId');
             if(pid) this.projectId = pid;
             this.fetchData();
         },
         methods: {
-            goHome() { window.location.href = 'index.html'; },
+            // 返回首页
+            goHome() {
+                localStorage.removeItem('fromDashboard'); // 清除标记
+                window.location.href = 'index.html';
+            },
 
-            // ✅ 新增：手动触发司空2同步
+            // [核心修复] 跳转配置页：同时记录来源和当前项目ID
+            goToConfig(type) {
+                localStorage.setItem('fromDashboard', 'true');
+                // 确保项目ID被传入，解决下级页面名称显示Loading的问题
+                if(this.projectId) {
+                    localStorage.setItem('currentProjectId', this.projectId);
+                }
+
+                if(type === 'boundary') window.location.href = 'boundary.html';
+                else if(type === 'floor') window.location.href = 'floor-config.html';
+                else if(type === 'plan') window.location.href = 'plan-config.html';
+            },
+
+            // 格式化时间
+            formatLastUpdate(dateStr) {
+                if (!dateStr || dateStr === '暂无') return '暂无数据';
+                return dateStr.replace('T', ' ');
+            },
+
+            // 获取状态样式类
+            getStatusClass(color) {
+                return 'status-' + (color || 'info');
+            },
+
+            // 获取状态图标
+            getStatusIcon(color) {
+                if (color === 'danger') return 'el-icon-warning';
+                if (color === 'success') return 'el-icon-success';
+                if (color === 'warning') return 'el-icon-timer';
+                return 'el-icon-info';
+            },
+
+            // API: 同步大疆
             handleSyncDji() {
                 this.syncing = true;
                 const token = localStorage.getItem('token');
-
-                // 注意：这里调用的是 /api/projects/{id}/sync 接口
-                // 我们在下一步会确保后端 ProjectController 拥有这个接口
                 axios.post(`/api/projects/${this.projectId}/sync`, {}, {
                     headers: { 'Authorization': token ? 'Bearer ' + token : '' }
                 }).then(res => {
                     if((res.data.code || res.data.status) === 200) {
                         this.$message.success("云端照片同步任务已触发！");
-                        // 同步完成后，通常也意味着可能会有新计算，延迟一下刷新数据
                         setTimeout(() => this.fetchData(), 2000);
                     } else {
                         this.$message.error(res.data.message || "同步指令发送失败");
@@ -231,17 +608,16 @@
                 });
             },
 
-            // ✅ 新增：手动触发进度计算
+            // API: 重新计算
             handleRecalculate() {
                 this.calculating = true;
                 const token = localStorage.getItem('token');
-
                 axios.post(`/api/progress/calculate?projectId=${this.projectId}`, {}, {
                     headers: { 'Authorization': token ? 'Bearer ' + token : '' }
                 }).then(res => {
                     if((res.data.code || res.data.status) === 200) {
                         this.$message.success("进度重算完成！");
-                        this.fetchData(); // 刷新页面数据
+                        this.fetchData();
                     } else {
                         this.$message.error(res.data.message || "计算失败");
                     }
@@ -252,6 +628,7 @@
                 });
             },
 
+            // API: 获取数据
             fetchData() {
                 const token = localStorage.getItem('token');
                 axios.get(`/api/progress/dashboard/${this.projectId}`, {
@@ -260,12 +637,18 @@
                     if((res.data.code || res.data.status) === 200) {
                         this.dashboardData = res.data.data;
                         this.loading = false;
-                        // 等待 DOM 渲染完毕后初始化图表
+
+                        // [新增] 成功获取数据后，更新缓存中的项目ID，双重保险
+                        if(this.dashboardData.projectId) {
+                            localStorage.setItem('currentProjectId', this.dashboardData.projectId);
+                        }
+
                         this.$nextTick(() => {
                             this.renderCharts();
                         });
                     } else {
                         this.$message.error("数据获取失败");
+                        this.loading = false;
                     }
                 }).catch(() => {
                     this.$message.error("网络请求异常");
@@ -273,59 +656,60 @@
                 });
             },
 
+            // ECharts 渲染逻辑
             renderCharts() {
                 this.dashboardData.buildings.forEach((b, index) => {
-                    // 如果没有数据，跳过
                     if (!b.dates || b.dates.length === 0) return;
 
-                    // --- 图1: 趋势对比 ---
+                    const commonGrid = { top: 35, bottom: 25, left: 40, right: 15, containLabel: true };
+                    const xAxis = { type: 'category', data: b.dates, axisLine: { lineStyle: { color: '#555' } }, axisLabel: { color: '#888' } };
+                    const yAxis = { type: 'value', splitLine: { lineStyle: { color: '#333', type: 'dashed' } }, axisLabel: { color: '#888' } };
+
+                    // Chart 1: 趋势
                     const chartTrend = echarts.init(document.getElementById('chart-trend-' + index));
                     chartTrend.setOption({
                         tooltip: { trigger: 'axis' },
-                        legend: { data: ['计划', '实际'], textStyle: { color: '#a2a2b8' }, bottom: 0 },
-                        grid: { top: 30, bottom: 60, left: 40, right: 20 },
-                        xAxis: { type: 'category', data: b.dates, axisLine: { lineStyle: { color: '#555' } } },
-                        yAxis: { type: 'value', splitLine: { lineStyle: { color: '#333' } } },
+                        legend: { data: ['计划', '实际'], textStyle: { color: '#a2a2b8' }, bottom: 0, icon: 'circle' },
+                        grid: commonGrid,
+                        xAxis: xAxis,
+                        yAxis: yAxis,
                         series: [
-                            { name: '计划', type: 'line', data: b.planFloors, lineStyle: { color: '#28c76f' }, showSymbol: false },
-                            { name: '实际', type: 'line', data: b.actualFloors, lineStyle: { color: '#7367f0' }, itemStyle: { color: '#7367f0' } }
+                            { name: '计划', type: 'line', data: b.planFloors, lineStyle: { color: '#28c76f', width: 2 }, showSymbol: false, itemStyle: {color: '#28c76f'} },
+                            { name: '实际', type: 'line', data: b.actualFloors, lineStyle: { color: '#7367f0', width: 2 }, itemStyle: { color: '#7367f0' } }
                         ]
                     });
 
-                    // --- 图2: 物理高度 (面积图) ---
+                    // Chart 2: 高度
                     const chartHeight = echarts.init(document.getElementById('chart-height-' + index));
                     chartHeight.setOption({
                         tooltip: { trigger: 'axis' },
-                        grid: { top: 30, bottom: 30, left: 40, right: 20 },
-                        xAxis: { type: 'category', data: b.dates, axisLine: { lineStyle: { color: '#555' } } },
-                        yAxis: { type: 'value', splitLine: { lineStyle: { color: '#333' } } },
-                        series: [
-                            {
-                                name: '高度(m)', type: 'line', data: b.actualHeights, smooth: true,
-                                lineStyle: { color: '#00cfe8' },
-                                areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{offset: 0, color: 'rgba(0, 207, 232, 0.5)'}, {offset: 1, color: 'rgba(0, 207, 232, 0)'}]) }
-                            }
-                        ]
+                        grid: commonGrid,
+                        xAxis: xAxis,
+                        yAxis: yAxis,
+                        series: [{
+                            name: '高度(m)', type: 'line', data: b.actualHeights, smooth: true,
+                            lineStyle: { color: '#00cfe8', width: 2 },
+                            itemStyle: { color: '#00cfe8' },
+                            areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{offset: 0, color: 'rgba(0, 207, 232, 0.4)'}, {offset: 1, color: 'rgba(0, 207, 232, 0)'}]) }
+                        }]
                     });
 
-                    // --- 图3: 偏差分析 (正负柱状图) ---
+                    // Chart 3: 偏差
                     const chartDiff = echarts.init(document.getElementById('chart-diff-' + index));
                     chartDiff.setOption({
                         tooltip: { trigger: 'axis' },
-                        grid: { top: 30, bottom: 30, left: 40, right: 20 },
-                        xAxis: { type: 'category', data: b.dates, axisLine: { lineStyle: { color: '#555' } } },
-                        yAxis: { type: 'value', splitLine: { lineStyle: { color: '#333' } } },
-                        series: [
-                            {
-                                name: '偏差层数', type: 'bar', data: b.deviations,
-                                itemStyle: {
-                                    color: (params) => params.value >= 0 ? '#28c76f' : '#ea5455'
-                                }
+                        grid: commonGrid,
+                        xAxis: xAxis,
+                        yAxis: yAxis,
+                        series: [{
+                            name: '偏差层数', type: 'bar', data: b.deviations,
+                            itemStyle: {
+                                color: (params) => params.value >= 0 ? '#28c76f' : '#ea5455',
+                                borderRadius: [3, 3, 0, 0]
                             }
-                        ]
+                        }]
                     });
 
-                    // 窗口大小改变时自适应
                     window.addEventListener('resize', () => {
                         chartTrend.resize(); chartHeight.resize(); chartDiff.resize();
                     });

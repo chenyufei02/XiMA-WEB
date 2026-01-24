@@ -7,7 +7,9 @@ import com.whu.ximaweb.mapper.*;
 import com.whu.ximaweb.model.*;
 import com.whu.ximaweb.service.ProgressService;
 import com.whu.ximaweb.service.impl.ProgressServiceImpl;
+import lombok.Data;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -235,5 +237,66 @@ public class ProgressController {
             } catch (Exception e) {}
         }
         return max;
+    }
+
+    /**
+     * 👉 4. ✅ 新增：批量保存计划进度
+     * 前端传入：楼栋ID、总层数、每一层的计划时间列表
+     */
+    @PostMapping("/plan/save")
+    @Transactional(rollbackFor = Exception.class)
+    public ApiResponse<String> savePlanConfig(@RequestBody PlanConfigDto dto) {
+        // 1. 校验楼栋
+        SysBuilding building = sysBuildingMapper.selectById(dto.getBuildingId());
+        if (building == null) return ApiResponse.error("楼栋不存在");
+
+        // 关键：PlanProgress 表使用的是 Navisworks 的模型名称 (Building 字段)
+        // 所以我们必须确保当前楼栋已经绑定了模型名称
+        String modelName = building.getPlanBuildingName();
+        if (modelName == null || modelName.isEmpty()) {
+            // 如果没绑定，默认用楼栋名作为模型名 (兼容逻辑)
+            modelName = building.getName();
+            // 更新回去，确保下次能对应上
+            building.setPlanBuildingName(modelName);
+            sysBuildingMapper.updateById(building);
+        }
+
+        // 2. 删除该楼栋旧的计划数据 (覆盖模式)
+        planProgressMapper.deleteByBuildingName(modelName);
+
+        // 3. 批量插入新数据
+        for (PlanItem item : dto.getItems()) {
+            PlanProgress p = new PlanProgress();
+            p.setBuildingName(modelName); // 存入模型名
+            p.setFloor(String.valueOf(item.getFloor())); // 存入层号
+
+            // 处理时间
+            if (item.getStartDate() != null) {
+                p.setPlannedStart(LocalDate.parse(item.getStartDate()).atStartOfDay());
+            }
+            if (item.getEndDate() != null) {
+                // 结束时间通常设为当天的最后一秒
+                p.setPlannedEnd(LocalDate.parse(item.getEndDate()).atTime(23, 59, 59));
+            }
+
+            planProgressMapper.insert(p);
+        }
+
+        return ApiResponse.success("计划保存成功！已更新 " + dto.getItems().size() + " 层数据");
+    }
+
+    // --- DTO 内部类 ---
+    @Data
+    public static class PlanConfigDto {
+        private Integer projectId;
+        private Integer buildingId;
+        private List<PlanItem> items;
+    }
+
+    @Data
+    public static class PlanItem {
+        private Integer floor;
+        private String startDate; // yyyy-MM-dd
+        private String endDate;   // yyyy-MM-dd
     }
 }

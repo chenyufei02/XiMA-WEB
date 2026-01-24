@@ -161,6 +161,20 @@ public class ProjectController {
     }
 
     /**
+     * ✅ 新增：获取单个项目详情
+     * 用于解决前端显示“未知项目”的问题
+     */
+    @GetMapping("/{id}")
+    public ApiResponse<SysProject> getProjectDetail(@PathVariable Integer id) {
+        SysProject project = sysProjectMapper.selectById(id);
+        if (project == null) {
+            return ApiResponse.error("项目不存在");
+        }
+        return ApiResponse.success("获取成功", project);
+    }
+
+
+    /**
      * 更新项目信息
      */
     @PutMapping("/{id}")

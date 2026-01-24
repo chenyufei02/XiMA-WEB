@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>楼层参数配置 - XiMA 智造</title>
+    <title>施工计划配置 - XiMA 智造</title>
     <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
     <style>
         /* =========================================================
@@ -52,7 +52,7 @@
             box-shadow: 2px 0 10px rgba(0,0,0,0.2);
         }
 
-        /* 项目标题区域 (修复显示不全) */
+        /* 项目标题区域 (已包含 CSS 修复：允许换行) */
         .project-title-area {
             min-height: var(--header-height);
             display: flex;
@@ -181,37 +181,34 @@
             margin-bottom: 20px;
             padding-bottom: 10px;
             border-bottom: 1px solid var(--border-color);
-            color: var(--accent-blue);
+            color: var(--accent-green);
             display: flex;
             align-items: center;
             gap: 10px;
         }
 
-        .config-area {
-            background: rgba(0,0,0,0.2);
-            padding: 20px;
-            border-radius: 8px;
-            border: 1px dashed rgba(255,255,255,0.1);
-            margin-bottom: 20px;
-        }
-
-        .mode-desc {
+        .tips-text {
             font-size: 13px;
             color: var(--text-secondary);
-            margin-bottom: 15px;
-            line-height: 1.5;
+            margin-bottom: 20px;
+            line-height: 1.6;
+            background: rgba(40, 199, 111, 0.1);
+            padding: 10px 15px;
+            border-radius: 6px;
+            border-left: 3px solid var(--accent-green);
         }
 
         /* =========================================================
            4. Element UI 覆盖样式
            ========================================================= */
         .el-form-item__label { color: var(--text-secondary); }
-        .el-input__inner, .el-input-number__decrease, .el-input-number__increase {
+        .el-input__inner, .el-range-input {
             background-color: #151521;
             border-color: var(--border-color);
             color: #fff;
         }
-        .el-input__inner:focus { border-color: var(--accent-purple); }
+        .el-input__inner:focus, .el-range-input:focus { border-color: var(--accent-green); }
+        .el-date-editor .el-range-separator { color: #fff; }
 
         .el-select-dropdown {
             background-color: var(--card-bg);
@@ -220,22 +217,28 @@
         .el-select-dropdown__item { color: var(--text-secondary); }
         .el-select-dropdown__item.hover, .el-select-dropdown__item:hover { background-color: rgba(255,255,255,0.05); }
 
-        /* 表格样式 */
         .el-table, .el-table__expanded-cell { background-color: transparent !important; color: var(--text-primary); }
         .el-table th, .el-table tr { background-color: transparent !important; }
         .el-table td, .el-table th.is-leaf { border-bottom: 1px solid var(--border-color); }
-        .el-table--enable-row-hover .el-table__body tr:hover > td { background-color: rgba(115, 103, 240, 0.1) !important; }
+        .el-table--enable-row-hover .el-table__body tr:hover > td { background-color: rgba(40, 199, 111, 0.1) !important; }
         .el-table::before { background-color: transparent; }
+
+        .el-picker-panel {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+        .el-date-table th { color: var(--text-primary); }
+        .el-date-table td.in-range div { background-color: rgba(40, 199, 111, 0.2); }
+        .el-date-table td.in-range div:hover { background-color: rgba(40, 199, 111, 0.4); }
+        .el-picker-panel__icon-btn { color: var(--text-secondary); }
+        .el-date-picker__header-label { color: #fff; }
 
         .el-button--default { background: transparent; border: 1px solid var(--text-secondary); color: var(--text-secondary); }
         .el-button--default:hover { color: #fff; border-color: #fff; }
-        .el-button--primary { background: linear-gradient(45deg, var(--accent-purple), #9f96f6); border: none; }
-        .el-button--primary:hover { box-shadow: 0 4px 12px rgba(115, 103, 240, 0.4); }
-
-        .el-radio { color: var(--text-primary); margin-right: 30px; }
-        .el-radio__input.is-checked + .el-radio__label { color: var(--accent-blue); }
-        .el-radio__inner { background: transparent; border-color: var(--text-secondary); }
-        .el-radio__input.is-checked .el-radio__inner { border-color: var(--accent-blue); background: var(--accent-blue); }
+        .el-button--primary { background: linear-gradient(45deg, var(--accent-green), #48da89); border: none; font-weight: bold; }
+        .el-button--primary:hover { box-shadow: 0 4px 12px rgba(40, 199, 111, 0.4); }
+        .el-button--success { background: linear-gradient(45deg, var(--accent-purple), var(--accent-blue)); border: none; }
 
         .empty-tips {
             text-align: center;
@@ -260,14 +263,14 @@
                 <div class="nav-item" @click="goToPage('boundary.html')">
                     <i class="el-icon-map-location"></i> 电子围栏
                 </div>
-                <div class="nav-item active">
+                <div class="nav-item" @click="goToPage('floor-config.html')">
                     <i class="el-icon-office-building"></i> 楼层配置
                 </div>
-                <div class="nav-item" @click="goToPage('plan-config.html')">
+                <div class="nav-item active">
                     <i class="el-icon-date"></i> 计划进度
                 </div>
             </div>
-            <div class="back-home" @click="goHome">
+            <div class="back-home" @click="goToPage('index.html')">
                 <i class="el-icon-back"></i> 返回系统首页
             </div>
         </template>
@@ -280,11 +283,14 @@
                 <div class="nav-item" @click="goHome">
                     <i class="el-icon-menu"></i> 项目概览
                 </div>
-                <div class="nav-item" @click="goToPage('plan-config.html')">
+                <div class="nav-item active">
                     <i class="el-icon-date"></i> 计划进度
                 </div>
                 <div class="nav-item" @click="goToPage('import.html')">
                     <i class="el-icon-upload"></i> 项目导入
+                </div>
+                <div class="nav-item">
+                    <i class="el-icon-setting"></i> 系统设置
                 </div>
             </div>
         </template>
@@ -293,7 +299,7 @@
     <div class="main-content">
         <div class="header-bar">
             <div class="page-title">
-                <i class="el-icon-s-operation"></i> 楼层参数配置
+                <i class="el-icon-date"></i> 施工计划配置
             </div>
             <div style="display: flex; gap: 10px;">
                 <el-button
@@ -322,7 +328,7 @@
                         <el-input v-model="projectId" disabled style="width: 80px; text-align: center;"></el-input>
                     </el-form-item>
                     <el-form-item label="选择目标楼栋">
-                        <el-select v-model="currentBuildingId" placeholder="请选择楼栋" @change="loadFloorData" style="width: 240px;">
+                        <el-select v-model="currentBuildingId" placeholder="请选择楼栋" @change="onBuildingChange" style="width: 240px;">
                             <el-option v-for="b in buildingList" :key="b.id" :label="b.name" :value="b.id">
                                 <span style="float: left">{{ b.name }}</span>
                                 <span style="float: right; color: #8492a6; font-size: 12px; margin-left:10px" v-if="b.planBuildingName">🔗 {{ b.planBuildingName }}</span>
@@ -334,110 +340,86 @@
 
             <div class="card-box" v-if="currentBuildingId">
                 <div class="section-title">
-                    <span><i class="el-icon-cpu"></i> 楼层生成策略</span>
+                    <span><i class="el-icon-magic-stick"></i> 批量生成策略</span>
                 </div>
 
-                <div style="margin-bottom: 10px;" v-if="currentBuildingId">
-                     <el-switch
-                        v-if="floorList.length > 0"
-                        v-model="showGenerator"
-                        active-text="显示批量生成工具"
-                        inactive-text="隐藏工具 (已加载现有数据)">
-                    </el-switch>
+                <div class="tips-text">
+                    <i class="el-icon-info"></i> 系统将根据您输入的「总层数」和「总工期」，自动采用线性插值算法分配每一层的计划开始与结束时间。生成预览后，您仍可在下方表格中针对特定层（如节假日、停工期）进行微调。
                 </div>
 
-                <div style="margin-bottom: 10px;">
-                     <el-switch
-                        v-if="floorList.length > 0"
-                        v-model="showGenerator"
-                        active-text="显示批量生成工具"
-                        inactive-text="隐藏工具 (已加载现有数据)">
-                    </el-switch>
-                </div>
+                <el-form :inline="true" size="small" label-width="100px">
+                    <el-form-item label="地上总层数">
+                        <el-input-number v-model="totalFloors" :min="1" :max="150" controls-position="right"></el-input-number>
+                    </el-form-item>
 
-                <div class="config-area" v-if="showGenerator || floorList.length === 0">
-                    <div style="margin-bottom: 20px;">
-                        <el-radio-group v-model="configMode">
-                            <el-radio label="A">模式 A: 统一标准层高 (适用于办公楼标准段)</el-radio>
-                            <el-radio label="B">模式 B: 首层特殊 + 标准层 (推荐，适用于大多数住宅)</el-radio>
-                            <el-radio label="C">模式 C: 纯手动录入</el-radio>
-                        </el-radio-group>
-                    </div>
+                    <el-form-item label="计划总工期">
+                        <el-date-picker
+                            v-model="dateRange"
+                            type="daterange"
+                            unlink-panels
+                            range-separator="至"
+                            start-placeholder="开工日期"
+                            end-placeholder="完工日期"
+                            value-format="yyyy-MM-dd"
+                            style="width: 320px;">
+                        </el-date-picker>
+                    </el-form-item>
 
-                    <div v-if="configMode === 'A' || configMode === 'B'">
-                        <el-form :inline="true" size="small">
-                            <el-form-item label="总层数">
-                                <el-input-number v-model="params.totalFloors" :min="1" :max="150" controls-position="right"></el-input-number>
-                            </el-form-item>
+                    <el-form-item>
+                        <el-button type="primary" icon="el-icon-cpu" @click="generatePlanPreview">一键生成预览</el-button>
+                    </el-form-item>
+                </el-form>
 
-                            <el-form-item label="首层高度(m)" v-if="configMode === 'B'">
-                                <el-input-number v-model="params.firstHeight" :precision="2" :step="0.1" :min="1" controls-position="right"></el-input-number>
-                            </el-form-item>
+                <div v-if="planList.length > 0" style="margin-top: 30px;">
+                    <div style="border-top: 1px solid var(--border-color); margin-bottom: 20px;"></div>
 
-                            <el-form-item label="标准层高(m)">
-                                <el-input-number v-model="params.stdHeight" :precision="2" :step="0.1" :min="1" controls-position="right"></el-input-number>
-                            </el-form-item>
-
-                            <el-form-item>
-                                <el-button type="primary" icon="el-icon-magic-stick" @click="generatePreview">生成/重置表格</el-button>
-                            </el-form-item>
-                        </el-form>
-                        <div class="mode-desc" v-if="configMode === 'B'">
-                            <i class="el-icon-info"></i> 系统将自动生成 {{ params.totalFloors }} 层数据。第 1 层高度为 {{ params.firstHeight }}m，其余层高度为 {{ params.stdHeight }}m。
-                        </div>
-                    </div>
-                </div>
-
-                <div style="margin-top: 30px;" v-if="floorList.length > 0">
                     <div style="margin-bottom: 15px; font-weight: bold; color: var(--text-primary); display: flex; justify-content: space-between; align-items: center;">
-                        <span>
-                            📊 楼层数据配置 (共 {{ floorList.length }} 层)
-                            <span style="font-size:12px; font-weight:normal; color:#28c76f; margin-left:10px" v-if="isEditMode"><i class="el-icon-check"></i> 已加载现有配置</span>
-                        </span>
-                        <span style="font-size: 12px; color: var(--text-secondary); font-weight: normal;">* 修改任意层高会自动重算上方所有楼层的累计标高</span>
+                        <span>📊 进度计划预览 (共 {{ planList.length }} 层)</span>
+                        <span style="font-size: 12px; color: var(--text-secondary); font-weight: normal;">* 点击下方按钮微调日期</span>
                     </div>
 
-                    <el-table :data="floorList" border size="mini" height="450" style="width: 100%;">
-                        <el-table-column prop="floorNumber" label="楼层 (F)" width="100" align="center">
+                    <el-table :data="planList" border size="mini" height="500" style="width: 100%;">
+                        <el-table-column prop="floor" label="楼层 (F)" width="100" align="center">
                             <template slot-scope="scope">
-                                <span style="font-weight: bold;">{{ scope.row.floorNumber }}F</span>
+                                <span style="font-weight: bold;">{{ scope.row.floor }}F</span>
                             </template>
                         </el-table-column>
 
-                        <el-table-column label="本层层高 (米)" width="200" align="center">
+                        <el-table-column label="计划开始时间" align="center">
                             <template slot-scope="scope">
-                                <el-input-number
-                                    v-model="scope.row.floorHeight"
-                                    :precision="2"
-                                    :step="0.1"
-                                    size="mini"
-                                    controls-position="right"
-                                    style="width: 140px;"
-                                    @change="recalcCumulative(scope.$index)">
-                                </el-input-number>
+                                <el-date-picker v-model="scope.row.startDate" type="date" value-format="yyyy-MM-dd" size="mini" style="width: 100%;"></el-date-picker>
                             </template>
                         </el-table-column>
 
-                        <el-table-column label="层顶累计标高 (米)" align="center">
+                        <el-table-column label="计划完成时间" align="center">
                             <template slot-scope="scope">
-                                <span style="font-weight: bold; color: var(--accent-blue); font-size: 14px;">{{ scope.row.cumulativeHeight }} m</span>
+                                <el-date-picker v-model="scope.row.endDate" type="date" value-format="yyyy-MM-dd" size="mini" style="width: 100%;"></el-date-picker>
                             </template>
                         </el-table-column>
 
-                        <el-table-column label="操作" width="120" align="center">
+                        <el-table-column label="工期(天)" width="100" align="center">
                             <template slot-scope="scope">
-                                <el-button type="text" icon="el-icon-delete" style="color: #ea5455" @click="removeFloor(scope.$index)">删除</el-button>
+                                <span style="color: var(--accent-green); font-weight: bold;">
+                                    {{ calculateDays(scope.row.startDate, scope.row.endDate) }}
+                                </span>
+                            </template>
+                        </el-table-column>
+
+                        <el-table-column label="微调操作" width="120" align="center">
+                            <template slot-scope="scope">
+                                <el-tooltip content="整体提前1天" placement="top">
+                                    <i class="el-icon-top" style="cursor: pointer; margin-right: 10px; color: var(--accent-blue);" @click="shiftDate(scope.$index, -1)"></i>
+                                </el-tooltip>
+                                <el-tooltip content="整体推后1天" placement="top">
+                                    <i class="el-icon-bottom" style="cursor: pointer; color: var(--accent-red);" @click="shiftDate(scope.$index, 1)"></i>
+                                </el-tooltip>
                             </template>
                         </el-table-column>
                     </el-table>
 
-                    <div style="margin-top: 15px;">
-                        <el-button size="small" type="primary" plain icon="el-icon-plus" style="width: 100%" @click="addFloor">添加一层</el-button>
-                    </div>
-
                     <div style="margin-top: 30px; text-align: center; border-top: 1px solid var(--border-color); padding-top: 20px;">
-                        <el-button type="primary" icon="el-icon-check" style="width: 240px; font-weight: bold;" @click="saveToBackend" :disabled="floorList.length === 0">
-                            确认并保存配置
+                        <el-button type="success" size="medium" icon="el-icon-check" style="width: 240px; font-weight: bold;" @click="savePlan">
+                            确认并保存生效
                         </el-button>
                     </div>
                 </div>
@@ -446,7 +428,7 @@
             <div class="card-box" v-else>
                 <div class="empty-tips">
                     <i class="el-icon-office-building"></i>
-                    <p>请先在上方选择一个楼栋开始配置</p>
+                    <p>请先在上方选择一个楼栋开始配置进度</p>
                 </div>
             </div>
         </div>
@@ -456,6 +438,7 @@
 <script src="https://unpkg.com/vue@2/dist/vue.js"></script>
 <script src="https://unpkg.com/element-ui/lib/index.js"></script>
 <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
 
 <script>
     new Vue({
@@ -467,50 +450,39 @@
             // 页面状态
             isProjectMode: false,
             projectName: '',
-            isEditMode: false, // 是否处于编辑已有数据模式
-            showGenerator: true, // 控制生成器显示
 
-            // 楼栋数据
+            // 数据模型
             buildingList: [],
             currentBuildingId: null,
-
-            // 配置参数
-            configMode: 'B',
-            params: {
-                totalFloors: 10,
-                firstHeight: 4.5,
-                stdHeight: 3.0
-            },
-            floorList: []
+            totalFloors: 30,
+            dateRange: [], // [start, end]
+            planList: []
         },
         mounted() {
-            // 1. 获取基础参数 (修复：优先读取 Dashboard 传入的 currentProjectId)
+            // 1. 获取 ID 和 Token (修复：优先从 localStorage 获取 currentProjectId)
             const pid = localStorage.getItem('currentProjectId');
             const fromDash = localStorage.getItem('fromDashboard');
             if(pid) this.projectId = pid;
+            if(this.token && !this.token.startsWith('Bearer ')) this.token = 'Bearer ' + this.token;
 
-            // 2. 处理 Token
-            if (this.token && !this.token.startsWith('Bearer ')) {
-                this.token = 'Bearer ' + this.token;
-            }
-
-            // 3. 判断是否是项目模式
+            // 2. 判断模式
             if (fromDash === 'true') {
                 this.isProjectMode = true;
                 this.fetchProjectInfo();
             }
 
-            // 4. 加载楼栋列表
+            // 3. 加载楼栋
             this.loadBuildings();
         },
         methods: {
-            // 获取项目信息
+            // [核心修复] 获取项目信息：使用稳健逻辑（兼容 code/status，增加错误处理）
             fetchProjectInfo() {
                 if(!this.projectId) return;
-                // 使用 axios 请求后端获取详情
+
                 axios.get(`/api/projects/${this.projectId}`, {
                     headers: { 'Authorization': this.token }
                 }).then(res => {
+                    // 兼容 code 或 status 字段
                     if((res.data.code || res.data.status) === 200) {
                         this.projectName = res.data.data.projectName;
                     }
@@ -520,7 +492,7 @@
                 });
             },
 
-            // 页面跳转逻辑
+            // 页面跳转
             goToPage(url) {
                 if(url === 'index.html') localStorage.removeItem('fromDashboard');
                 window.location.href = url;
@@ -534,122 +506,87 @@
                 else window.location.href = 'index.html';
             },
 
-            // 加载楼栋
+            // 加载楼栋 API
             loadBuildings() {
                 axios.get(`/api/buildings/list?projectId=${this.projectId}`, {
                     headers: { 'Authorization': this.token }
                 }).then(res => {
-                    if((res.data.code || res.data.status) === 200) {
+                    if(res.data.code === 200 || res.data.status === 200) {
                         this.buildingList = res.data.data;
                     }
                 });
             },
 
-
-            // [修改] 加载楼层数据（支持回显）
-            loadFloorData() {
-                // 1. 初始化状态
-                this.floorList = [];
-                this.isEditMode = false;
-                this.showGenerator = true; // 默认显示生成工具
-
-                if(!this.currentBuildingId) return;
-
-                // 2. 请求后端查询接口
-                axios.get(`/api/floors/list?buildingId=${this.currentBuildingId}`, {
-                    headers: { 'Authorization': this.token }
-                }).then(res => {
-                    const data = res.data.data;
-
-                    // 3. 判断是否已有数据
-                    if (data && data.length > 0) {
-                        // A. 有数据：回显到表格
-                        this.floorList = data;
-                        this.isEditMode = true;
-
-                        // 优化体验：自动隐藏生成工具，并将“总层数”输入框同步，防止误操作
-                        this.showGenerator = false;
-                        this.params.totalFloors = data.length;
-
-                        this.$message.success(`已加载该楼栋的 ${data.length} 层配置数据`);
-                    } else {
-                        // B. 无数据：提示用户生成
-                        this.$message.info("该楼栋暂无配置，请使用下方工具生成");
-                    }
-                }).catch(e => {
-                    this.$message.error("加载楼层数据失败");
-                });
+            onBuildingChange() {
+                this.planList = []; // 切换楼栋时清空列表
             },
 
             // 核心算法：生成预览
-            generatePreview() {
-                this.floorList = [];
-                let currentH = 0;
-                for (let i = 1; i <= this.params.totalFloors; i++) {
-                    let h = this.params.stdHeight;
-                    // 模式B：首层特殊高度
-                    if (this.configMode === 'B' && i === 1) h = this.params.firstHeight;
+            generatePlanPreview() {
+                if(!this.dateRange || this.dateRange.length < 2) {
+                    this.$message.warning("请先选择计划工期范围");
+                    return;
+                }
 
-                    currentH += h;
-                    this.floorList.push({
-                        floorNumber: i,
-                        floorHeight: parseFloat(h.toFixed(2)),
-                        cumulativeHeight: parseFloat(currentH.toFixed(2))
+                const start = moment(this.dateRange[0]);
+                const end = moment(this.dateRange[1]);
+                const daysTotal = end.diff(start, 'days') + 1; // 总天数
+
+                if(daysTotal <= 0) return;
+
+                const daysPerFloor = daysTotal / this.totalFloors;
+                this.planList = [];
+
+                for(let i=1; i<=this.totalFloors; i++) {
+                    // 线性插值算法
+                    const offsetStart = Math.floor((i - 1) * daysPerFloor);
+                    const offsetEnd = Math.floor(i * daysPerFloor) - 1;
+
+                    let fStart = start.clone().add(offsetStart, 'days');
+                    let fEnd = start.clone().add(offsetEnd, 'days');
+
+                    // 修正：确保结束不早于开始
+                    if(fEnd.isBefore(fStart)) fEnd = fStart.clone();
+
+                    this.planList.push({
+                        floor: i,
+                        startDate: fStart.format('YYYY-MM-DD'),
+                        endDate: fEnd.format('YYYY-MM-DD')
                     });
                 }
-                this.isEditMode = false;
-                this.$message.success("预览数据已生成");
+                this.$message.success("预览已生成，请核对");
             },
 
-            // 核心算法：重新计算累计高度
-            recalcCumulative(startIndex) {
-                let currentH = (startIndex > 0) ? this.floorList[startIndex - 1].cumulativeHeight : 0;
-                for (let i = startIndex; i < this.floorList.length; i++) {
-                    currentH += this.floorList[i].floorHeight;
-                    this.floorList[i].cumulativeHeight = parseFloat(currentH.toFixed(2));
-                }
+            calculateDays(s, e) {
+                if(!s || !e) return 0;
+                return moment(e).diff(moment(s), 'days') + 1;
             },
 
-            addFloor() {
-                const lastCumulative = this.floorList.length > 0
-                    ? this.floorList[this.floorList.length-1].cumulativeHeight
-                    : 0;
-                const nextFloorNum = this.floorList.length + 1;
-
-                this.floorList.push({
-                    floorNumber: nextFloorNum,
-                    floorHeight: 3.0,
-                    cumulativeHeight: parseFloat((lastCumulative + 3.0).toFixed(2))
-                });
-                // 更新总层数显示
-                this.params.totalFloors = this.floorList.length;
+            // 微调逻辑
+            shiftDate(index, days) {
+                const row = this.planList[index];
+                row.startDate = moment(row.startDate).add(days, 'days').format('YYYY-MM-DD');
+                row.endDate = moment(row.endDate).add(days, 'days').format('YYYY-MM-DD');
             },
 
-            removeFloor(index) {
-                this.floorList.splice(index, 1);
-                // 重置楼层号
-                this.floorList.forEach((item, idx) => item.floorNumber = idx + 1);
-                // 重算高度
-                this.recalcCumulative(0);
-                // 更新总层数显示
-                this.params.totalFloors = this.floorList.length;
-            },
+            // 保存
+            savePlan() {
+                const payload = {
+                    projectId: this.projectId,
+                    buildingId: this.currentBuildingId,
+                    items: this.planList
+                };
 
-            saveToBackend() {
-                if(this.floorList.length === 0) return;
-
-                axios.post(`/api/floors/save?projectId=${this.projectId}&buildingId=${this.currentBuildingId}`,
-                    this.floorList,
-                    { headers: { 'Authorization': this.token } }
-                ).then(res => {
-                    if ((res.data.code || res.data.status) === 200) {
-                        this.$message.success("配置保存成功！");
-                        this.isEditMode = true; // 标记为已保存
+                axios.post('/api/progress/plan/save', payload, {
+                    headers: { 'Authorization': this.token }
+                }).then(res => {
+                    if(res.data.code === 200 || res.data.status === 200) {
+                        this.$message.success("计划进度保存成功！");
                     } else {
-                        this.$message.error(res.data.message || "保存失败");
+                        this.$message.error("保存失败：" + res.data.message);
                     }
                 }).catch(() => {
-                    this.$message.error("保存请求失败");
+                    this.$message.error("网络请求失败");
                 });
             }
         }
