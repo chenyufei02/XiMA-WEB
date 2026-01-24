@@ -52,7 +52,6 @@
             box-shadow: 2px 0 10px rgba(0,0,0,0.2);
         }
 
-        /* 项目标题区域 (修复显示不全) */
         .project-title-area {
             min-height: var(--header-height);
             display: flex;
@@ -65,7 +64,7 @@
             font-size: 16px;
             letter-spacing: 0.5px;
             cursor: default;
-            white-space: normal; /* 允许换行 */
+            white-space: normal;
             line-height: 1.3;
             text-align: center;
             background: rgba(0,0,0,0.1);
@@ -220,7 +219,6 @@
         .el-select-dropdown__item { color: var(--text-secondary); }
         .el-select-dropdown__item.hover, .el-select-dropdown__item:hover { background-color: rgba(255,255,255,0.05); }
 
-        /* 表格样式 */
         .el-table, .el-table__expanded-cell { background-color: transparent !important; color: var(--text-primary); }
         .el-table th, .el-table tr { background-color: transparent !important; }
         .el-table td, .el-table th.is-leaf { border-bottom: 1px solid var(--border-color); }
@@ -243,6 +241,16 @@
             color: var(--text-secondary);
         }
         .empty-tips i { font-size: 48px; margin-bottom: 15px; opacity: 0.5; }
+
+        /* --- 修复：Switch 开关文字颜色适配深色模式 --- */
+        .el-switch__label {
+            color: var(--text-secondary) !important; /* 未选中时的文字颜色 (浅灰) */
+        }
+        .el-switch__label.is-active {
+            color: var(--accent-blue) !important;    /* 选中时的文字颜色 (高亮蓝) */
+        }
+
+
     </style>
 </head>
 <body>
@@ -337,21 +345,11 @@
                     <span><i class="el-icon-cpu"></i> 楼层生成策略</span>
                 </div>
 
-                <div style="margin-bottom: 10px;" v-if="currentBuildingId">
+                <div style="margin-bottom: 10px;" v-if="floorList.length > 0">
                      <el-switch
-                        v-if="floorList.length > 0"
                         v-model="showGenerator"
-                        active-text="显示批量生成工具"
-                        inactive-text="隐藏工具 (已加载现有数据)">
-                    </el-switch>
-                </div>
-
-                <div style="margin-bottom: 10px;">
-                     <el-switch
-                        v-if="floorList.length > 0"
-                        v-model="showGenerator"
-                        active-text="显示批量生成工具"
-                        inactive-text="隐藏工具 (已加载现有数据)">
+                        active-text="重新生成"
+                        inactive-text="查看现有">
                     </el-switch>
                 </div>
 
@@ -484,7 +482,7 @@
             floorList: []
         },
         mounted() {
-            // 1. 获取基础参数 (修复：优先读取 Dashboard 传入的 currentProjectId)
+            // 1. 获取基础参数
             const pid = localStorage.getItem('currentProjectId');
             const fromDash = localStorage.getItem('fromDashboard');
             if(pid) this.projectId = pid;
@@ -504,10 +502,8 @@
             this.loadBuildings();
         },
         methods: {
-            // 获取项目信息
             fetchProjectInfo() {
                 if(!this.projectId) return;
-                // 使用 axios 请求后端获取详情
                 axios.get(`/api/projects/${this.projectId}`, {
                     headers: { 'Authorization': this.token }
                 }).then(res => {
@@ -520,7 +516,6 @@
                 });
             },
 
-            // 页面跳转逻辑
             goToPage(url) {
                 if(url === 'index.html') localStorage.removeItem('fromDashboard');
                 window.location.href = url;
@@ -534,7 +529,6 @@
                 else window.location.href = 'index.html';
             },
 
-            // 加载楼栋
             loadBuildings() {
                 axios.get(`/api/buildings/list?projectId=${this.projectId}`, {
                     headers: { 'Authorization': this.token }
@@ -545,35 +539,28 @@
                 });
             },
 
-
-            // [修改] 加载楼层数据（支持回显）
+            // 加载楼层数据（支持回显）
             loadFloorData() {
-                // 1. 初始化状态
                 this.floorList = [];
                 this.isEditMode = false;
-                this.showGenerator = true; // 默认显示生成工具
+                this.showGenerator = true;
 
                 if(!this.currentBuildingId) return;
 
-                // 2. 请求后端查询接口
                 axios.get(`/api/floors/list?buildingId=${this.currentBuildingId}`, {
                     headers: { 'Authorization': this.token }
                 }).then(res => {
                     const data = res.data.data;
-
-                    // 3. 判断是否已有数据
                     if (data && data.length > 0) {
-                        // A. 有数据：回显到表格
                         this.floorList = data;
                         this.isEditMode = true;
 
-                        // 优化体验：自动隐藏生成工具，并将“总层数”输入框同步，防止误操作
+                        // 自动收起生成器
                         this.showGenerator = false;
                         this.params.totalFloors = data.length;
 
                         this.$message.success(`已加载该楼栋的 ${data.length} 层配置数据`);
                     } else {
-                        // B. 无数据：提示用户生成
                         this.$message.info("该楼栋暂无配置，请使用下方工具生成");
                     }
                 }).catch(e => {
@@ -581,13 +568,11 @@
                 });
             },
 
-            // 核心算法：生成预览
             generatePreview() {
                 this.floorList = [];
                 let currentH = 0;
                 for (let i = 1; i <= this.params.totalFloors; i++) {
                     let h = this.params.stdHeight;
-                    // 模式B：首层特殊高度
                     if (this.configMode === 'B' && i === 1) h = this.params.firstHeight;
 
                     currentH += h;
@@ -601,7 +586,6 @@
                 this.$message.success("预览数据已生成");
             },
 
-            // 核心算法：重新计算累计高度
             recalcCumulative(startIndex) {
                 let currentH = (startIndex > 0) ? this.floorList[startIndex - 1].cumulativeHeight : 0;
                 for (let i = startIndex; i < this.floorList.length; i++) {
@@ -621,17 +605,13 @@
                     floorHeight: 3.0,
                     cumulativeHeight: parseFloat((lastCumulative + 3.0).toFixed(2))
                 });
-                // 更新总层数显示
                 this.params.totalFloors = this.floorList.length;
             },
 
             removeFloor(index) {
                 this.floorList.splice(index, 1);
-                // 重置楼层号
                 this.floorList.forEach((item, idx) => item.floorNumber = idx + 1);
-                // 重算高度
                 this.recalcCumulative(0);
-                // 更新总层数显示
                 this.params.totalFloors = this.floorList.length;
             },
 
@@ -644,7 +624,7 @@
                 ).then(res => {
                     if ((res.data.code || res.data.status) === 200) {
                         this.$message.success("配置保存成功！");
-                        this.isEditMode = true; // 标记为已保存
+                        this.isEditMode = true;
                     } else {
                         this.$message.error(res.data.message || "保存失败");
                     }

@@ -285,6 +285,51 @@ public class ProgressController {
         return ApiResponse.success("计划保存成功！已更新 " + dto.getItems().size() + " 层数据");
     }
 
+    /**
+     * 👉 5. ✅ 新增：获取计划进度列表 (用于前端回显)
+     */
+    @GetMapping("/plan/list")
+    public ApiResponse<List<PlanItem>> getPlanList(@RequestParam Integer buildingId) {
+        SysBuilding building = sysBuildingMapper.selectById(buildingId);
+        if (building == null) return ApiResponse.error("楼栋不存在");
+
+        // 优先使用模型名查询，如果没有则用楼栋名
+        String modelName = building.getPlanBuildingName();
+        if (modelName == null || modelName.isEmpty()) modelName = building.getName();
+
+        List<PlanProgress> list = planProgressMapper.selectList(
+            new QueryWrapper<PlanProgress>()
+                .eq("Building", modelName)
+                // 按楼层排序，这里需要注意 Floor 字段是 String，可能需要自定义排序逻辑，这里简单按字符串排
+                // 实际生产中建议转成数字排序
+        );
+
+        // 转换成前端需要的 DTO
+        List<PlanItem> result = new ArrayList<>();
+        // 为了排序，我们可以简单提取数字
+        list.sort((a, b) -> {
+            int fa = extractInt(a.getFloor());
+            int fb = extractInt(b.getFloor());
+            return fa - fb;
+        });
+
+        for (PlanProgress p : list) {
+            PlanItem item = new PlanItem();
+            item.setFloor(extractInt(p.getFloor()));
+            if (p.getPlannedStart() != null) item.setStartDate(p.getPlannedStart().toLocalDate().toString());
+            if (p.getPlannedEnd() != null) item.setEndDate(p.getPlannedEnd().toLocalDate().toString());
+            result.add(item);
+        }
+        return ApiResponse.success("获取成功", result);
+    }
+
+    // 辅助方法：从 "1F", "F1", "1" 中提取数字 1
+    private int extractInt(String str) {
+        try {
+            return Integer.parseInt(str.replaceAll("[^0-9]", ""));
+        } catch (Exception e) { return 0; }
+    }
+
     // --- DTO 内部类 ---
     @Data
     public static class PlanConfigDto {

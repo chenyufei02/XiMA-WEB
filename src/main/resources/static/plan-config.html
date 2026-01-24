@@ -52,7 +52,6 @@
             box-shadow: 2px 0 10px rgba(0,0,0,0.2);
         }
 
-        /* 项目标题区域 (已包含 CSS 修复：允许换行) */
         .project-title-area {
             min-height: var(--header-height);
             display: flex;
@@ -65,7 +64,7 @@
             font-size: 16px;
             letter-spacing: 0.5px;
             cursor: default;
-            white-space: normal; /* 允许换行 */
+            white-space: normal;
             line-height: 1.3;
             text-align: center;
             background: rgba(0,0,0,0.1);
@@ -246,6 +245,14 @@
             color: var(--text-secondary);
         }
         .empty-tips i { font-size: 48px; margin-bottom: 15px; opacity: 0.5; }
+
+        /* --- 修复：Switch 开关文字颜色适配深色模式 --- */
+        .el-switch__label {
+            color: var(--text-secondary) !important; /* 未选中时的文字颜色 (浅灰) */
+        }
+        .el-switch__label.is-active {
+            color: var(--accent-blue) !important;    /* 选中时的文字颜色 (高亮蓝) */
+        }
     </style>
 </head>
 <body>
@@ -343,38 +350,51 @@
                     <span><i class="el-icon-magic-stick"></i> 批量生成策略</span>
                 </div>
 
-                <div class="tips-text">
-                    <i class="el-icon-info"></i> 系统将根据您输入的「总层数」和「总工期」，自动采用线性插值算法分配每一层的计划开始与结束时间。生成预览后，您仍可在下方表格中针对特定层（如节假日、停工期）进行微调。
+                <div style="margin-bottom: 10px;" v-if="planList.length > 0">
+                     <el-switch
+                        v-model="showGenerator"
+                        active-text="展开生成配置 (重新生成)"
+                        inactive-text="折叠面板 (仅查看数据)">
+                    </el-switch>
                 </div>
 
-                <el-form :inline="true" size="small" label-width="100px">
-                    <el-form-item label="地上总层数">
-                        <el-input-number v-model="totalFloors" :min="1" :max="150" controls-position="right"></el-input-number>
-                    </el-form-item>
+                <div v-if="showGenerator || planList.length === 0">
+                    <div class="tips-text">
+                        <i class="el-icon-info"></i> 系统将根据您输入的「总层数」和「总工期」，自动采用线性插值算法分配每一层的计划开始与结束时间。生成预览后，您仍可在下方表格中针对特定层（如节假日、停工期）进行微调。
+                    </div>
 
-                    <el-form-item label="计划总工期">
-                        <el-date-picker
-                            v-model="dateRange"
-                            type="daterange"
-                            unlink-panels
-                            range-separator="至"
-                            start-placeholder="开工日期"
-                            end-placeholder="完工日期"
-                            value-format="yyyy-MM-dd"
-                            style="width: 320px;">
-                        </el-date-picker>
-                    </el-form-item>
+                    <el-form :inline="true" size="small" label-width="100px">
+                        <el-form-item label="地上总层数">
+                            <el-input-number v-model="totalFloors" :min="1" :max="150" controls-position="right"></el-input-number>
+                        </el-form-item>
 
-                    <el-form-item>
-                        <el-button type="primary" icon="el-icon-cpu" @click="generatePlanPreview">一键生成预览</el-button>
-                    </el-form-item>
-                </el-form>
+                        <el-form-item label="计划总工期">
+                            <el-date-picker
+                                v-model="dateRange"
+                                type="daterange"
+                                unlink-panels
+                                range-separator="至"
+                                start-placeholder="开工日期"
+                                end-placeholder="完工日期"
+                                value-format="yyyy-MM-dd"
+                                style="width: 320px;">
+                            </el-date-picker>
+                        </el-form-item>
+
+                        <el-form-item>
+                            <el-button type="primary" icon="el-icon-cpu" @click="generatePlanPreview">一键生成预览</el-button>
+                        </el-form-item>
+                    </el-form>
+                </div>
 
                 <div v-if="planList.length > 0" style="margin-top: 30px;">
                     <div style="border-top: 1px solid var(--border-color); margin-bottom: 20px;"></div>
 
                     <div style="margin-bottom: 15px; font-weight: bold; color: var(--text-primary); display: flex; justify-content: space-between; align-items: center;">
-                        <span>📊 进度计划预览 (共 {{ planList.length }} 层)</span>
+                        <span>
+                            📊 进度计划预览 (共 {{ planList.length }} 层)
+                            <span style="font-size:12px; font-weight:normal; color:#28c76f; margin-left:10px" v-if="isEditMode"><i class="el-icon-check"></i> 已加载现有计划</span>
+                        </span>
                         <span style="font-size: 12px; color: var(--text-secondary); font-weight: normal;">* 点击下方按钮微调日期</span>
                     </div>
 
@@ -446,53 +466,47 @@
         data: {
             projectId: 1,
             token: localStorage.getItem('token'),
-
-            // 页面状态
             isProjectMode: false,
             projectName: '',
 
-            // 数据模型
             buildingList: [],
             currentBuildingId: null,
+
+            // 状态变量
+            isEditMode: false,
+            showGenerator: true,
+
             totalFloors: 30,
-            dateRange: [], // [start, end]
+            dateRange: [],
             planList: []
         },
         mounted() {
-            // 1. 获取 ID 和 Token (修复：优先从 localStorage 获取 currentProjectId)
             const pid = localStorage.getItem('currentProjectId');
             const fromDash = localStorage.getItem('fromDashboard');
             if(pid) this.projectId = pid;
             if(this.token && !this.token.startsWith('Bearer ')) this.token = 'Bearer ' + this.token;
 
-            // 2. 判断模式
             if (fromDash === 'true') {
                 this.isProjectMode = true;
                 this.fetchProjectInfo();
             }
 
-            // 3. 加载楼栋
             this.loadBuildings();
         },
         methods: {
-            // [核心修复] 获取项目信息：使用稳健逻辑（兼容 code/status，增加错误处理）
             fetchProjectInfo() {
                 if(!this.projectId) return;
-
                 axios.get(`/api/projects/${this.projectId}`, {
                     headers: { 'Authorization': this.token }
                 }).then(res => {
-                    // 兼容 code 或 status 字段
                     if((res.data.code || res.data.status) === 200) {
                         this.projectName = res.data.data.projectName;
                     }
                 }).catch(e => {
-                    console.error("获取项目名失败", e);
                     this.projectName = "未知项目";
                 });
             },
 
-            // 页面跳转
             goToPage(url) {
                 if(url === 'index.html') localStorage.removeItem('fromDashboard');
                 window.location.href = url;
@@ -506,7 +520,6 @@
                 else window.location.href = 'index.html';
             },
 
-            // 加载楼栋 API
             loadBuildings() {
                 axios.get(`/api/buildings/list?projectId=${this.projectId}`, {
                     headers: { 'Authorization': this.token }
@@ -518,10 +531,46 @@
             },
 
             onBuildingChange() {
-                this.planList = []; // 切换楼栋时清空列表
+                this.planList = [];
+                this.dateRange = [];
+                this.loadPlanData();
             },
 
-            // 核心算法：生成预览
+            // [新增] 加载已有计划数据 (回显逻辑)
+            loadPlanData() {
+                if(!this.currentBuildingId) return;
+
+                this.isEditMode = false;
+                this.showGenerator = true;
+
+                axios.get(`/api/progress/plan/list?buildingId=${this.currentBuildingId}`, {
+                    headers: { 'Authorization': this.token }
+                }).then(res => {
+                    const data = res.data.data;
+                    if(data && data.length > 0) {
+                        this.planList = data;
+                        this.isEditMode = true;
+                        this.showGenerator = false;
+
+                        // 智能反推参数
+                        this.totalFloors = data.length;
+
+                        // 计算已有的时间范围，回填到 DatePicker
+                        const dates = [];
+                        data.forEach(item => {
+                            if(item.startDate) dates.push(item.startDate);
+                            if(item.endDate) dates.push(item.endDate);
+                        });
+                        if(dates.length > 0) {
+                            dates.sort();
+                            this.dateRange = [dates[0], dates[dates.length - 1]];
+                        }
+
+                        this.$message.success(`已加载 ${data.length} 条计划数据`);
+                    }
+                });
+            },
+
             generatePlanPreview() {
                 if(!this.dateRange || this.dateRange.length < 2) {
                     this.$message.warning("请先选择计划工期范围");
@@ -530,7 +579,7 @@
 
                 const start = moment(this.dateRange[0]);
                 const end = moment(this.dateRange[1]);
-                const daysTotal = end.diff(start, 'days') + 1; // 总天数
+                const daysTotal = end.diff(start, 'days') + 1;
 
                 if(daysTotal <= 0) return;
 
@@ -538,14 +587,12 @@
                 this.planList = [];
 
                 for(let i=1; i<=this.totalFloors; i++) {
-                    // 线性插值算法
                     const offsetStart = Math.floor((i - 1) * daysPerFloor);
                     const offsetEnd = Math.floor(i * daysPerFloor) - 1;
 
                     let fStart = start.clone().add(offsetStart, 'days');
                     let fEnd = start.clone().add(offsetEnd, 'days');
 
-                    // 修正：确保结束不早于开始
                     if(fEnd.isBefore(fStart)) fEnd = fStart.clone();
 
                     this.planList.push({
@@ -554,6 +601,7 @@
                         endDate: fEnd.format('YYYY-MM-DD')
                     });
                 }
+                this.isEditMode = false;
                 this.$message.success("预览已生成，请核对");
             },
 
@@ -562,14 +610,12 @@
                 return moment(e).diff(moment(s), 'days') + 1;
             },
 
-            // 微调逻辑
             shiftDate(index, days) {
                 const row = this.planList[index];
                 row.startDate = moment(row.startDate).add(days, 'days').format('YYYY-MM-DD');
                 row.endDate = moment(row.endDate).add(days, 'days').format('YYYY-MM-DD');
             },
 
-            // 保存
             savePlan() {
                 const payload = {
                     projectId: this.projectId,
@@ -582,6 +628,7 @@
                 }).then(res => {
                     if(res.data.code === 200 || res.data.status === 200) {
                         this.$message.success("计划进度保存成功！");
+                        this.isEditMode = true;
                     } else {
                         this.$message.error("保存失败：" + res.data.message);
                     }
