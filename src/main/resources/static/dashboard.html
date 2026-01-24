@@ -138,7 +138,7 @@
             flex-shrink: 0;
             display: flex;
             align-items: center;
-            justify-content: flex-end;
+            justify-content: space-between;
             padding: 0 40px;
             background: rgba(30, 30, 45, 0.95);
             border-bottom: 1px solid var(--border-color);
@@ -353,11 +353,30 @@
         }
 
         /* --- 6. Element UI 覆盖与 Loading --- */
-        .el-loading-mask { background-color: rgba(30, 30, 45, 0.9); }
-        .el-button--primary { background: linear-gradient(45deg, #7367f0, #9e95f5); border: none; box-shadow: 0 4px 10px rgba(115, 103, 240, 0.3); }
-        .el-button--primary:hover { box-shadow: 0 6px 15px rgba(115, 103, 240, 0.5); transform: translateY(-1px); }
-        .el-button--success { background: linear-gradient(45deg, #28c76f, #48da89); border: none; box-shadow: 0 4px 10px rgba(40, 199, 111, 0.3); }
-        .el-button--success:hover { box-shadow: 0 6px 15px rgba(40, 199, 111, 0.5); transform: translateY(-1px); }
+        /* --- 按钮样式统一 (复用计划页风格) --- */
+        .el-button--default {
+            background: transparent !important;
+            border: 1px solid var(--text-secondary) !important;
+            color: var(--text-secondary) !important;
+            transition: all 0.3s;
+        }
+        .el-button--default:hover {
+            color: #fff !important;
+            border-color: #fff !important;
+            background: rgba(255,255,255,0.05) !important;
+        }
+
+        /* 保持 Primary 和 Success 按钮原有样式 */
+        .el-button--primary {
+            background: linear-gradient(45deg, #7367f0, #9e95f5) !important;
+            border: none !important;
+            color: white !important;
+        }
+        .el-button--success {
+            background: linear-gradient(45deg, #28c76f, #48da89) !important;
+            border: none !important;
+            color: white !important;
+        }
 
         /* 空状态 */
         .empty-state {
@@ -397,17 +416,9 @@
 
     <div class="main-content">
         <div class="header">
-            <div style="flex:1">
-               <el-button
-                    size="small"
-                    icon="el-icon-s-home"
-                    @click="goHome"
-                    style="background: transparent; border: 1px solid var(--text-secondary); color: var(--text-secondary);">
-                    返回系统首页
-                </el-button>
-            </div>
+            <div style="flex:1"></div>
 
-            <div class="header-controls">
+            <div class="header-controls" style="display: flex; align-items: center; gap: 10px;">
                 <el-button
                     type="primary"
                     size="small"
@@ -416,6 +427,7 @@
                     @click="handleSyncDji">
                     同步司空照片
                 </el-button>
+
                 <el-button
                     type="success"
                     size="small"
@@ -423,6 +435,15 @@
                     :loading="calculating"
                     @click="handleRecalculate">
                     刷新进度计算
+                </el-button>
+
+                <div style="width: 1px; height: 20px; background: rgba(255,255,255,0.2); margin: 0 5px;"></div>
+
+                <el-button
+                    size="small"
+                    icon="el-icon-s-home"
+                    @click="goHome">
+                    返回系统首页
                 </el-button>
             </div>
         </div>
@@ -679,19 +700,63 @@
                         ]
                     });
 
-                    // Chart 2: 高度
+
+                    // --- 图2: 物理高度 (面积图) ---
                     const chartHeight = echarts.init(document.getElementById('chart-height-' + index));
                     chartHeight.setOption({
-                        tooltip: { trigger: 'axis' },
-                        grid: commonGrid,
-                        xAxis: xAxis,
-                        yAxis: yAxis,
-                        series: [{
-                            name: '高度(m)', type: 'line', data: b.actualHeights, smooth: true,
-                            lineStyle: { color: '#00cfe8', width: 2 },
-                            itemStyle: { color: '#00cfe8' },
-                            areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{offset: 0, color: 'rgba(0, 207, 232, 0.4)'}, {offset: 1, color: 'rgba(0, 207, 232, 0)'}]) }
-                        }]
+                        tooltip: {
+                            trigger: 'axis',
+                            // 🟡 自定义提示框：如果照片少，在浮层里也提示
+                            formatter: function (params) {
+                                let res = params[0].name + '<br/>';
+                                params.forEach(item => {
+                                    // 获取我们在 data 里塞进去的 photoCount
+                                    const count = item.data.photoCount;
+                                    // 如果 count 存在且小于3，加个红色警告字样
+                                    const warn = (count !== undefined && count < 3)
+                                        ? ' <span style="color:orange;font-weight:bold;">(⚠️照片不足)</span>'
+                                        : '';
+                                    res += item.marker + item.seriesName + ': ' + item.value + 'm' + warn + '<br/>';
+                                });
+                                return res;
+                            }
+                        },
+                        grid: { top: 30, bottom: 30, left: 40, right: 20 },
+                        xAxis: { type: 'category', data: b.dates, axisLine: { lineStyle: { color: '#555' } } },
+                        yAxis: { type: 'value', splitLine: { lineStyle: { color: '#333' } } },
+                        series: [
+                            {
+                                name: '高度(m)',
+                                type: 'line',
+                                // 🟡 关键修改：重组数据结构，把 photoCount 塞进去
+                                data: b.dates.map((d, i) => ({
+                                    value: b.actualHeights[i],
+                                    // 假如后端还没有传 photoCounts 数组，默认给个安全值(10)，防止报错
+                                    photoCount: (b.photoCounts && b.photoCounts[i] !== undefined) ? b.photoCounts[i] : 10
+                                })),
+                                smooth: true,
+                                lineStyle: { color: '#00cfe8' },
+                                areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{offset: 0, color: 'rgba(0, 207, 232, 0.5)'}, {offset: 1, color: 'rgba(0, 207, 232, 0)'}]) },
+
+                                // 🟡 核心逻辑：动态变色
+                                itemStyle: {
+                                    color: function(params) {
+                                        // 如果照片数 < 3，显示橙色警示
+                                        if (params.data.photoCount < 3) {
+                                            return '#ff9f43';
+                                        }
+                                        return '#00cfe8'; // 正常蓝色
+                                    },
+                                    borderWidth: 2
+                                },
+                                // 强制显示数据点，不然变色了也看不见
+                                showSymbol: true,
+                                symbolSize: function(val, params) {
+                                    // 警告点稍微大一点，更显眼
+                                    return params.data.photoCount < 3 ? 8 : 4;
+                                }
+                            }
+                        ]
                     });
 
                     // Chart 3: 偏差

@@ -23,10 +23,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
- * 进度管理服务核心实现 (V8 - 最终完整融合版)
+ * 进度管理服务核心实现 (V12 - 最终完整融合版)
  * 包含：
  * 1. 上传进度追踪 (保留原业务)
- * 2. 施工进度智能计算算法 (V7新算法：宽范围捕获 -> 距离阶跃分层 -> 均值迭代清洗 -> 动态基准推演)
+ * 2. 施工进度智能计算算法 (V12新算法：混合清洗[中位数/P25] -> 距离分层 -> 均值迭代 -> H2智能校验 -> 棘轮修正)
  * 3. Navisworks 状态分析与楼层换算 (保留原业务)
  */
 @Service
@@ -86,13 +86,13 @@ public class ProgressServiceImpl implements ProgressService {
     }
 
     // =========================================================
-    // 2. 核心业务：全自动施工进度计算 (V7 新算法逻辑)
+    // 2. 核心业务：全自动施工进度计算 (V12 升级版)
     // =========================================================
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void calculateProjectProgress(Integer projectId) {
-        System.out.println(">>> 开始执行进度计算，项目ID: " + projectId);
+        System.out.println(">>> 开始执行进度计算 (V12)，项目ID: " + projectId);
         SysProject project = sysProjectMapper.selectById(projectId);
         String projectName = (project != null) ? project.getProjectName() : "未知项目";
 
@@ -131,8 +131,8 @@ public class ProgressServiceImpl implements ProgressService {
                 double lat = (photo.getLrfTargetLat() != null) ? photo.getLrfTargetLat().doubleValue() : photo.getGpsLat().doubleValue();
                 double lng = (photo.getLrfTargetLng() != null) ? photo.getLrfTargetLng().doubleValue() : photo.getGpsLng().doubleValue();
 
-                // ✅ 修改：将缓冲区扩大到 30米，防止高空地面点丢失
-                if (isInsideOrBuffered(lat, lng, fence, 25.0)) {
+                // 缓冲区判定 (保持你原来的25.0米)
+                if (isInsideOrBuffered(lat, lng, fence, 20.0)) {
                     String dateStr = photo.getShootTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
 
                     RawData data = new RawData();
@@ -169,7 +169,56 @@ public class ProgressServiceImpl implements ProgressService {
                 List<RawData> allCandidates = dailyData.get(dateStr);
                 if (allCandidates.isEmpty()) continue;
 
-                // --- 步骤 A: 距离分层 (Distance Clustering) ---
+                LocalDate measureDate = LocalDate.parse(dateStr);
+                double avgDroneAlt = allCandidates.stream().mapToDouble(d -> d.droneAlt).average().orElse(0.0);
+
+                // 记录照片数量 (用于前端展示和算法分支)
+                int photoCount = allCandidates.size();
+
+                // =============================================================
+                // 🔥 步骤 A: 混合清洗策略 (V12 新增核心 - P25/中位数)
+                // =============================================================
+                if (photoCount > 0) {
+                    // 1. 提取所有距离并排序
+                    List<Double> distances = allCandidates.stream()
+                            .map(d -> d.dist).sorted().collect(Collectors.toList());
+
+                    double benchmark;
+
+                    // 2. 确定基准锚点 (Benchmark)
+                    if (photoCount <= 3) {
+                        // 小样本 -> 使用【中位数】
+                        if (photoCount % 2 == 0) {
+                            benchmark = (distances.get(photoCount/2 - 1) + distances.get(photoCount/2)) / 2.0;
+                        } else {
+                            benchmark = distances.get(photoCount/2);
+                        }
+                    } else {
+                        // 大样本 -> 使用【P25 分位数】 (防止地面点干扰)
+                        int p25Index = (int) Math.ceil(photoCount * 0.25) - 1;
+                        if (p25Index < 0) p25Index = 0;
+                        benchmark = distances.get(p25Index);
+                    }
+
+                    // 3. 设定阈值：剔除比基准值还小 5米 的突兀点 (塔吊/干扰)
+                    double safeThreshold = benchmark - 5.0;
+
+                    // 4. 执行过滤
+                    List<RawData> cleanCandidates = allCandidates.stream()
+                            .filter(d -> d.dist >= safeThreshold)
+                            .collect(Collectors.toList());
+
+                    if (!cleanCandidates.isEmpty()) {
+                        if (cleanCandidates.size() < allCandidates.size()) {
+                            System.out.println("   [清洗] 剔除高空噪点 " + (allCandidates.size() - cleanCandidates.size()) + " 个 (Benchmark=" + benchmark + ")");
+                        }
+                        allCandidates = cleanCandidates;
+                    }
+                }
+
+                // =============================================================
+                // 步骤 B: 距离分层 (Distance Clustering)
+                // =============================================================
 
                 // 1. 找 D_min
                 double dMin = allCandidates.stream().mapToDouble(d -> d.dist).min().orElse(0);
@@ -179,19 +228,17 @@ public class ProgressServiceImpl implements ProgressService {
                 List<RawData> h2List = new ArrayList<>();
 
                 for (RawData d : allCandidates) {
-                    if (d.dist <= dMin + 10.0) {
+                    if (d.dist <= dMin + 5.0) {
                         h1List.add(d);
-                    } else if (d.dist >= dMin + 20.0) {
+                    } else if (d.dist >= dMin + 10.0) {
                         h2List.add(d);
                     }
                 }
 
-                // 🔥 调试日志：打印当天的分类情况
+                // 调试日志
                 System.out.printf("[%s] D_min=%.2f | H1数量=%d | H2数量=%d%n", dateStr, dMin, h1List.size(), h2List.size());
-                if (!h1List.isEmpty()) System.out.println("   -> H1 样本: " + h1List.get(0).dist);
-                if (!h2List.isEmpty()) System.out.println("   -> H2 样本: " + h2List.get(0).dist);
 
-                // --- 步骤 B: H1 均值清洗 ---
+                // --- 步骤 C: H1 均值清洗 (剔除小杂物) ---
                 if (h1List.size() > 2) {
                     for (int i = 0; i < 3; i++) {
                         double avgH1 = h1List.stream().mapToDouble(d -> d.dist).average().orElse(0);
@@ -204,38 +251,60 @@ public class ProgressServiceImpl implements ProgressService {
                     }
                 }
 
-                // --- 步骤 C: 计算结果 ---
+                // --- 步骤 D: 最终计算 (含 H2 智能校验锁) ---
+
+                // 1. 计算 H1
                 double finalH1 = -1;
                 if (!h1List.isEmpty()) {
                     finalH1 = h1List.stream().mapToDouble(d -> d.dist).average().orElse(-1);
                 }
 
-                double finalH2 = -1;
-                boolean isH2Measured = false;
-                double avgDroneAlt = allCandidates.stream().mapToDouble(d -> d.droneAlt).average().orElse(0.0);
+                // 2. 准备计算 H2 的参数
+                // 3. 计算【理论 H2】 (历史回推)
+                double theoreticalH2 = -1;
+                ActualProgress lastRecord = actualProgressMapper.selectOne(new QueryWrapper<ActualProgress>()
+                        .eq("building_id", buildingId)
+                        .eq("is_h2_measured", true) // 必须是以前实测过的真地面
+                        .isNotNull("h2_val").isNotNull("drone_alt")
+                        .lt("measurement_date", measureDate)
+                        .orderByDesc("measurement_date").last("LIMIT 1"));
 
-                if (!h2List.isEmpty()) {
-                    // 地面数据简单清洗 (剔除 >5m 偏差)
-                    double tmpAvg = h2List.stream().mapToDouble(d -> d.dist).average().orElse(0);
-                    finalH2 = h2List.stream().mapToDouble(d -> d.dist)
-                            .filter(d -> Math.abs(d - tmpAvg) < 5.0).average().orElse(tmpAvg);
-                    isH2Measured = true;
+                if (lastRecord != null) {
+                    double baseH2 = lastRecord.getH2Val().doubleValue();
+                    double baseAlt = lastRecord.getDroneAlt().doubleValue();
+                    // 公式：理论H2 = 历史H2 + (今日飞高 - 历史飞高)
+                    theoreticalH2 = baseH2 + (avgDroneAlt - baseAlt);
                 }
 
-                // --- 步骤 D: 动态基准 ---
-                if (finalH2 == -1) {
-                    // 查库回推
-                    ActualProgress lastRecord = actualProgressMapper.selectOne(new QueryWrapper<ActualProgress>()
-                            .eq("building_id", buildingId)
-                            .eq("is_h2_measured", true)
-                            .isNotNull("h2_val").isNotNull("drone_alt")
-                            .lt("measurement_date", LocalDate.parse(dateStr))
-                            .orderByDesc("measurement_date").last("LIMIT 1"));
+                // 4. 计算【实测 H2】 (如果 H2List 不为空)
+                double measuredH2 = -1;
+                if (!h2List.isEmpty()) {
+                    double tmpAvg = h2List.stream().mapToDouble(d -> d.dist).average().orElse(0);
+                    measuredH2 = h2List.stream().mapToDouble(d -> d.dist)
+                            .filter(d -> Math.abs(d - tmpAvg) < 5.0).average().orElse(tmpAvg);
+                }
 
-                    if (lastRecord != null) {
-                        double baseH2 = lastRecord.getH2Val().doubleValue();
-                        double baseAlt = lastRecord.getDroneAlt().doubleValue();
-                        finalH2 = baseH2 + (avgDroneAlt - baseAlt);
+                // 5. 关键决策：H2 校验
+                double finalH2 = -1;
+                boolean isH2Measured = false;
+
+                if (measuredH2 != -1) {
+                    // 如果有历史数据，且 实测H2 远小于 理论H2 (差距 > 10m)
+                    // 说明：实测到的距离太短了，打到了裙楼或别的楼顶，不是真地面
+                    if (theoreticalH2 != -1 && (theoreticalH2 - measuredH2) > 10.0) {
+                        System.out.println("   [警告] 剔除伪地面数据(串扰/裙楼)! 实测H2=" + measuredH2 + " 理论H2=" + theoreticalH2);
+                        // 强制使用理论值
+                        finalH2 = theoreticalH2;
+                        isH2Measured = false; // 标记为非实测
+                    } else {
+                        // 正常情况，采纳实测值
+                        finalH2 = measuredH2;
+                        isH2Measured = true;
+                    }
+                } else {
+                    // 没测到 H2，直接用理论值
+                    if (theoreticalH2 != -1) {
+                        finalH2 = theoreticalH2;
                         System.out.println("   -> 使用历史基准补偿 H2: " + finalH2);
                     } else {
                         System.out.println("   -> ⚠️ 无 H2 数据且无历史基准！");
@@ -250,8 +319,10 @@ public class ProgressServiceImpl implements ProgressService {
                 if (actualHeight < 0) actualHeight = 0;
 
                 int preciseFloor = calculateFloorLevel(actualHeight, floorRuler);
+
+                // 🔴 注意：此处增加了 photoCount 参数，如果实体类未更新，请在这一行去掉 photoCount 参数
                 saveOrUpdateProgress(projectId, projectName, buildingId, LocalDate.parse(dateStr),
-                                     actualHeight, finalH1, finalH2, avgDroneAlt, preciseFloor, isH2Measured);
+                                     actualHeight, finalH1, finalH2, avgDroneAlt, preciseFloor, isH2Measured, photoCount);
 
                 if (planName != null && !planName.isEmpty()) {
                     analyzeAndSaveStatus(planName, LocalDate.parse(dateStr), preciseFloor);
@@ -353,9 +424,11 @@ public class ProgressServiceImpl implements ProgressService {
     /**
      * 保存进度记录 (带"单调递增"棘轮修正)
      * 修复：防止因无人机GPS误差导致出现"楼层变矮"的异常数据
+     * 修复：记录照片数量 photoCount (V12新增)
      */
     private void saveOrUpdateProgress(Integer projectId, String projectName, Integer buildingId, LocalDate date,
-                                      double rawHeight, double h1, double h2, double droneAlt, Integer rawFloor, boolean isH2Measured) {
+                                      double rawHeight, double h1, double h2, double droneAlt, Integer rawFloor, boolean isH2Measured,
+                                      Integer photoCount) { // 👈 新增参数
 
         // 1. 获取该楼栋截止到昨天的"历史最大高度"
         // 我们查出该楼栋所有日期的记录，按高度降序排，取第一条
@@ -406,6 +479,9 @@ public class ProgressServiceImpl implements ProgressService {
             exist.setDroneAlt(BigDecimal.valueOf(droneAlt).setScale(2, RoundingMode.HALF_UP));
             exist.setIsH2Measured(isH2Measured);
 
+            // 🔴 关键修改：保存 photoCount。如果你的实体类没加字段，这行会报红，请去实体类加字段
+            exist.setPhotoCount(photoCount);
+
             actualProgressMapper.updateById(exist);
         } else {
             ActualProgress progress = new ActualProgress();
@@ -421,6 +497,10 @@ public class ProgressServiceImpl implements ProgressService {
             progress.setH2Val(h2 != -1 ? BigDecimal.valueOf(h2).setScale(2, RoundingMode.HALF_UP) : null);
             progress.setDroneAlt(BigDecimal.valueOf(droneAlt).setScale(2, RoundingMode.HALF_UP));
             progress.setIsH2Measured(isH2Measured);
+
+            // 🔴 关键修改：保存 photoCount
+            progress.setPhotoCount(photoCount);
+
             progress.setCreatedAt(LocalDateTime.now());
 
             actualProgressMapper.insert(progress);
