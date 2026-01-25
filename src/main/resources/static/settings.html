@@ -337,7 +337,7 @@
                 axios.post('/api/settings/preview-report', { projectId: project.id }, {
                     headers: { 'Authorization': 'Bearer ' + token }
                 }).then(res => {
-                    if(res.data.code === 200) {
+                    if(res.data.status === 200) {
                         this.previewContent = res.data.data;
                     } else {
                         this.previewContent = '<p style="color:red">生成失败: ' + res.data.message + '</p>';
@@ -352,7 +352,7 @@
                 this.coding = true;
                 axios.post('/api/settings/send-verify', { email: this.form.email })
                     .then(res => {
-                        if(res.data.code === 200) {
+                        if(res.data.status === 200) {
                             this.$message.success('验证码已发送至新邮箱');
                             this.time = 60;
                             const timer = setInterval(() => { this.time--; if(this.time<=0) clearInterval(timer); }, 1000);
@@ -364,7 +364,7 @@
                 const token = localStorage.getItem('token');
                 axios.post('/api/settings/save', this.form, { headers: { 'Authorization': 'Bearer ' + token } })
                     .then(res => {
-                        if(res.data.code === 200) {
+                        if(res.data.status === 200) {
                             this.$message.success('配置已更新');
                             this.originalEmail = this.form.email;
                             this.form.code = '';
