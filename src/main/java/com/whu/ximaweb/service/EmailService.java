@@ -87,4 +87,17 @@ public class EmailService {
             this.expireTime = expireTime;
         }
     }
+
+    /**
+     * 发送普通文本邮件
+     */
+    public void sendSimpleMail(String to, String subject, String content) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        String nickName = "XiMA智造助手";
+        message.setFrom(nickName + " <" + fromEmail + ">");
+        message.setTo(to);
+        message.setSubject(subject);
+        message.setText(content);
+        mailSender.send(message);
+    }
 }

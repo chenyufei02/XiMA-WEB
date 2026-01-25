@@ -32,4 +32,9 @@ public class SysUser {
     private String email;
 
     private LocalDateTime createdAt;
+
+    /**
+     * 每日AI报告发送时间 (格式 HH:mm，如 "09:00")
+     */
+    private String reportTime;
 }

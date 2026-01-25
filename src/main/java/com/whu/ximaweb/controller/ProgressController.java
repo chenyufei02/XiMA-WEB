@@ -86,122 +86,111 @@ public class ProgressController {
     }
 
     /**
-     * 👉 3. ✅ 新增核心接口：获取项目看板详情数据 (Step 4 新增)
-     * 包含：顶部指标卡、每栋楼的状态、三张图表的所有数据点
-     * 调用方式：GET /api/progress/dashboard/1
+     * 👉 3. [已修改] 获取项目看板详情数据
+     * 逻辑变更：无论数据是否过期，都计算滞后/超前状态并统计。过期仅作为标记。
      */
     @GetMapping("/dashboard/{projectId}")
     public ApiResponse<DashboardVo> getDashboardData(@PathVariable Integer projectId) {
         DashboardVo vo = new DashboardVo();
 
-        // 1. 基础信息
         SysProject project = sysProjectMapper.selectById(projectId);
         if (project == null) return ApiResponse.error("项目不存在");
 
+        vo.setProjectId(project.getId()); // 确保传回ID
         vo.setProjectName(project.getProjectName());
-        // 计算安全运行天数 (从创建到现在)
         long days = ChronoUnit.DAYS.between(project.getCreatedAt().toLocalDate(), LocalDate.now());
         vo.setSafeRunDays(days);
 
-        // 2. 获取楼栋列表
         List<SysBuilding> buildings = sysBuildingMapper.selectList(
             new QueryWrapper<SysBuilding>().eq("project_id", projectId)
         );
         vo.setTotalBuildings(buildings.size());
 
         List<DashboardVo.BuildingProgressVo> buildingVos = new ArrayList<>();
-        int delayed = 0, normal = 0, ahead = 0, waiting = 0;
+        int delayed = 0, normal = 0, ahead = 0;
+        // 注意：waiting 不再用于表示“过期”，只表示“从未测过”
+        int waiting = 0;
         LocalDate maxDate = LocalDate.MIN;
 
-        // 3. 遍历楼栋计算状态
         for (SysBuilding b : buildings) {
             DashboardVo.BuildingProgressVo bVo = new DashboardVo.BuildingProgressVo();
             bVo.setBuildingId(b.getId());
             bVo.setBuildingName(b.getName());
             bVo.setPlanName(b.getPlanBuildingName());
 
-            // 3.1 获取实际进度历史 (按时间排序)
             List<ActualProgress> history = actualProgressMapper.selectList(
                 new QueryWrapper<ActualProgress>()
                     .eq("building_id", b.getId())
                     .orderByAsc("measurement_date")
             );
 
-            // 准备图表容器
+            // 初始化图表数据容器
             List<String> dates = new ArrayList<>();
             List<Integer> actualFloors = new ArrayList<>();
             List<Integer> planFloors = new ArrayList<>();
             List<Double> actualHeights = new ArrayList<>();
             List<Integer> deviations = new ArrayList<>();
+            List<Integer> photoCounts = new ArrayList<>(); // 支持 Dashboard 照片数预警
 
             if (!history.isEmpty()) {
-                // 取最新一条状态
                 ActualProgress latest = history.get(history.size() - 1);
                 bVo.setCurrentFloor(latest.getFloorLevel());
                 bVo.setCurrentHeight(latest.getActualHeight().doubleValue());
                 bVo.setLastMeasureDate(latest.getMeasurementDate().toString());
 
-                // 更新项目最后更新时间
                 if (latest.getMeasurementDate().isAfter(maxDate)) maxDate = latest.getMeasurementDate();
 
-                // 判断时效性 (>7天为过期)
+                // 1. 判定过时 (逻辑：超过7天) - 仅作为 UI 标记
                 long gap = ChronoUnit.DAYS.between(latest.getMeasurementDate(), LocalDate.now());
                 boolean isOutdated = gap > 7;
                 bVo.setOutdated(isOutdated);
 
-                // 计算状态 (使用 Service 中的逻辑)
+                // 2. 计算状态 (无论是否过时，都算)
                 String status = "暂无计划";
                 String color = "info";
 
-                if (isOutdated) {
-                    status = "暂无新数据"; // 超过7天，强制显示此状态
-                    color = "warning"; // 黄色
-                    waiting++;
-                } else {
-                    // 数据新鲜，进行计划对比
-                    if (b.getPlanBuildingName() != null) {
-                        status = progressServiceImpl.analyzeStatus(b.getPlanBuildingName(), latest.getFloorLevel(), latest.getMeasurementDate());
-                    }
-                    // 确定颜色
-                    if (status.contains("滞后")) {
-                        color = "danger"; // 红色
-                        delayed++;
-                    } else if (status.contains("超前")) {
-                        color = "success"; // 绿色
-                        ahead++;
-                    } else if (status.contains("正常")) {
-                        color = "primary"; // 蓝色
-                        normal++;
-                    } else {
-                        // 暂无计划
-                        waiting++;
-                    }
+                if (b.getPlanBuildingName() != null) {
+                    status = progressServiceImpl.analyzeStatus(b.getPlanBuildingName(), latest.getFloorLevel(), latest.getMeasurementDate());
                 }
+
+                // 3. 统计归类
+                if (status.contains("滞后")) {
+                    color = "danger";
+                    delayed++;
+                } else if (status.contains("超前")) {
+                    color = "success";
+                    ahead++;
+                } else if (status.contains("正常")) {
+                    color = "primary";
+                    normal++;
+                } else {
+                    waiting++; // 有数据但无计划
+                }
+
                 bVo.setStatusTag(status);
                 bVo.setStatusColor(color);
 
-                // 3.2 填充图表数据
+                // 填充历史数据
                 for (ActualProgress ap : history) {
                     dates.add(ap.getMeasurementDate().toString());
                     actualFloors.add(ap.getFloorLevel());
-                    actualHeights.add(ap.getActualHeight().doubleValue()); // 图2数据
+                    actualHeights.add(ap.getActualHeight().doubleValue());
+                    // 假设 ActualProgress 有 photoCount 字段，若没有需处理 null
+                    photoCounts.add(ap.getPhotoCount() == null ? 0 : ap.getPhotoCount());
 
-                    // 查当天的计划楼层 (用于画对比线)
                     int planFloor = getPlanFloorAtDate(b.getPlanBuildingName(), ap.getMeasurementDate());
                     planFloors.add(planFloor);
-
-                    // 计算偏差 (图3数据)
                     deviations.add(ap.getFloorLevel() - planFloor);
                 }
             } else {
-                // 暂无数据
+                // 真·暂无数据
                 bVo.setCurrentFloor(0);
                 bVo.setCurrentHeight(0.0);
                 bVo.setStatusTag("等待首次测量");
                 bVo.setStatusColor("info");
                 bVo.setLastMeasureDate("-");
                 bVo.setOutdated(false);
-                waiting++;
+                waiting++; // 真正的等待中
             }
 
             bVo.setDates(dates);
@@ -209,6 +198,7 @@ public class ProgressController {
             bVo.setPlanFloors(planFloors);
             bVo.setActualHeights(actualHeights);
             bVo.setDeviations(deviations);
+            bVo.setPhotoCounts(photoCounts);
 
             buildingVos.add(bVo);
         }
@@ -217,7 +207,7 @@ public class ProgressController {
         vo.setDelayedCount(delayed);
         vo.setNormalCount(normal);
         vo.setAheadCount(ahead);
-        vo.setWaitingCount(waiting);
+        vo.setWaitingCount(waiting); // 这里现在仅代表“无数据或无计划”的楼栋
         vo.setLastUpdateDate(maxDate == LocalDate.MIN ? "暂无" : maxDate.toString());
 
         return ApiResponse.success("获取成功", vo);

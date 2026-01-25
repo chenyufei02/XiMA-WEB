@@ -526,4 +526,130 @@ public class ProgressServiceImpl implements ProgressService {
         H1_ROOF,
         H2_GROUND
     }
+
+    // =========================================================
+    // 5. AI 日报数据聚合 (终极修正版：带调试日志 + 强制读取最新)
+    // =========================================================
+    @Override
+    public String getProjectFullStatusJson(Integer projectId) {
+        try {
+            SysProject project = sysProjectMapper.selectById(projectId);
+            String projectName = (project != null) ? project.getProjectName() : "未知项目";
+
+            // 1. 总体报告时间：直接写死为“截止今日”，避免 AI 算错系统时间
+            String reportTime = "截止今日 (" + LocalDate.now().toString() + ")";
+
+            Map<String, Object> root = new HashMap<>();
+            root.put("projectName", projectName);
+            root.put("reportTime", reportTime);
+
+            List<SysBuilding> buildings = sysBuildingMapper.selectList(
+                new QueryWrapper<SysBuilding>().eq("project_id", projectId)
+            );
+
+            List<Map<String, Object>> buildingList = new ArrayList<>();
+            int delayBuildingCount = 0;
+
+            System.out.println("========== AI 数据源调试开始 ==========");
+
+            for (SysBuilding b : buildings) {
+                Map<String, Object> bInfo = new HashMap<>();
+                bInfo.put("name", b.getName());
+
+                // --- A. 查实际进度 (关键修改) ---
+                // 按 measurement_date 倒序，如果有同一天的，按 id 倒序(取最新录入的)
+                ActualProgress actual = actualProgressMapper.selectOne(new QueryWrapper<ActualProgress>()
+                        .eq("building_id", b.getId())
+                        .orderByDesc("measurement_date", "id")
+                        .last("LIMIT 1"));
+
+                int currentFloor = 0;
+                double currentHeight = 0.0;
+                String lastMeasureDate = "暂无数据"; // 默认值
+
+                if (actual != null) {
+                    currentFloor = actual.getFloorLevel() != null ? actual.getFloorLevel() : 0;
+                    currentHeight = actual.getActualHeight() != null ? actual.getActualHeight().doubleValue() : 0.0;
+
+                    // 获取数据库里的真实日期
+                    if (actual.getMeasurementDate() != null) {
+                        lastMeasureDate = actual.getMeasurementDate().toString();
+                    }
+                }
+
+                // 打印调试日志：请在控制台查看这里输出的日期和高度是不是你想要的！
+                System.out.println("楼栋: " + b.getName() + " | DB日期: " + lastMeasureDate + " | DB高度: " + currentHeight);
+
+                bInfo.put("currentFloor", currentFloor);
+                bInfo.put("currentHeight", String.format("%.2f", currentHeight));
+                bInfo.put("lastMeasureDate", lastMeasureDate); // 传给 AI
+
+                // --- B. 查计划进度 ---
+                int plannedFloor = 0;
+                String plannedEndDate = "未设置计划";
+
+                if (b.getPlanBuildingName() != null) {
+                    List<PlanProgress> plans = planProgressMapper.selectList(new QueryWrapper<PlanProgress>()
+                            .eq("Building", b.getPlanBuildingName())
+                            .le("PlannedEnd", LocalDateTime.now()));
+                    for (PlanProgress p : plans) {
+                        try {
+                            String fStr = p.getFloor().replaceAll("[^0-9]", "");
+                            if (!fStr.isEmpty()) {
+                                int f = Integer.parseInt(fStr);
+                                if (f > plannedFloor) plannedFloor = f;
+                            }
+                        } catch (Exception e) {}
+                    }
+                }
+                bInfo.put("plannedFloor", plannedFloor);
+
+                // --- C. 计算滞后 ---
+                int floorDiff = currentFloor - plannedFloor;
+                long delayDays = 0;
+
+                if (floorDiff >= 0) {
+                    bInfo.put("status", "正常");
+                    bInfo.put("statusDesc", "进度正常");
+                } else {
+                    bInfo.put("status", "滞后");
+                    delayBuildingCount++;
+
+                    if (b.getPlanBuildingName() != null) {
+                        PlanProgress planForCurrent = planProgressMapper.selectOne(new QueryWrapper<PlanProgress>()
+                                .eq("Building", b.getPlanBuildingName())
+                                .like("Floor", String.valueOf(currentFloor))
+                                .last("LIMIT 1"));
+
+                        if (planForCurrent != null && planForCurrent.getPlannedEnd() != null) {
+                            LocalDate planDate = planForCurrent.getPlannedEnd().toLocalDate();
+                            LocalDate today = LocalDate.now();
+                            plannedEndDate = planDate.toString();
+
+                            if (planDate.isBefore(today)) {
+                                delayDays = java.time.temporal.ChronoUnit.DAYS.between(planDate, today);
+                            }
+                        }
+                    }
+                    bInfo.put("delayDays", delayDays);
+                    bInfo.put("delayFloors", Math.abs(floorDiff));
+                    bInfo.put("plannedEndDate", plannedEndDate);
+                }
+
+                buildingList.add(bInfo);
+            }
+            System.out.println("========== AI 数据源调试结束 ==========");
+
+            root.put("buildings", buildingList);
+            root.put("overallSummary", delayBuildingCount > 0
+                ? "项目整体存在延期风险，共有 " + delayBuildingCount + " 栋楼进度滞后。"
+                : "项目整体进度管控良好，各单体均按计划推进。");
+
+            return objectMapper.writeValueAsString(root);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return "{\"error\": \"数据计算异常: " + e.getMessage() + "\"}";
+        }
+    }
 }

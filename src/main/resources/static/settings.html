@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>系统设置 - XiMA 智能建造</title>
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+<style>
+    /* --- 1. 全局深色主题定义 (复用 Index) --- */
+    :root {
+        --bg-color: #1e1e2d;
+        --sidebar-bg: #151521;
+        --card-bg: #2b2b40;
+        --text-primary: #e1e1e6;
+        --text-secondary: #a2a2b8;
+        --accent-purple: #7367f0;
+        --accent-blue: #00cfe8;
+        --accent-green: #28c76f;
+        --accent-red: #ea5455;
+        --border-color: rgba(255,255,255,0.08);
+        --hover-bg: rgba(255, 255, 255, 0.05);
+    }
+
+    body, html {
+        margin: 0; padding: 0; height: 100%;
+        font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        background-color: var(--bg-color);
+        color: var(--text-primary);
+        overflow: hidden;
+        -webkit-font-smoothing: antialiased;
+    }
+
+    #app { display: flex; height: 100vh; width: 100vw; }
+
+    /* --- 2. 侧边栏样式 --- */
+    .sidebar {
+        width: 260px;
+        background-color: var(--sidebar-bg);
+        display: flex; flex-direction: column;
+        border-right: 1px solid var(--border-color);
+        flex-shrink: 0; z-index: 1000;
+    }
+    .logo-area {
+        height: 80px; display: flex; align-items: center; justify-content: center;
+        font-size: 22px; font-weight: 700; color: white;
+        border-bottom: 1px solid var(--border-color);
+        letter-spacing: 1px; text-shadow: 0 0 10px rgba(115, 103, 240, 0.3);
+    }
+    .logo-area i { color: var(--accent-purple); margin-right: 12px; font-size: 26px; }
+    .nav-menu { flex: 1; padding: 25px 15px; overflow-y: auto; }
+    .nav-item {
+        display: flex; align-items: center; padding: 14px 20px;
+        margin-bottom: 8px; border-radius: 8px; color: var(--text-secondary);
+        cursor: pointer; transition: all 0.3s ease; font-size: 15px; font-weight: 500;
+    }
+    .nav-item:hover { background-color: var(--hover-bg); color: #fff; transform: translateX(5px); }
+    .nav-item.active {
+        background: linear-gradient(90deg, rgba(115, 103, 240, 0.25), transparent);
+        color: var(--accent-purple); border-left: 4px solid var(--accent-purple);
+    }
+    .nav-item i { margin-right: 15px; font-size: 20px; width: 24px; text-align: center; }
+
+    /* --- 3. 主内容区域 --- */
+    .main-content {
+        flex: 1; display: flex; flex-direction: column;
+        overflow: hidden; position: relative;
+        background: radial-gradient(circle at top right, #252535 0%, var(--bg-color) 40%);
+    }
+    .top-header {
+        height: 80px; display: flex; justify-content: space-between; align-items: center;
+        padding: 0 40px; background-color: rgba(30, 30, 45, 0.8);
+        backdrop-filter: blur(10px); border-bottom: 1px solid var(--border-color);
+        flex-shrink: 0; z-index: 100;
+    }
+    .page-title h2 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: 0.5px; }
+    .user-profile { display: flex; align-items: center; gap: 20px; }
+    .user-info { text-align: right; line-height: 1.4; }
+    .user-name { font-weight: bold; font-size: 14px; color: #fff; }
+    .user-role { font-size: 12px; color: var(--text-secondary); }
+    .avatar {
+        width: 42px; height: 42px;
+        background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue));
+        border-radius: 50%; display: flex; align-items: center; justify-content: center;
+        font-weight: bold; color: white; font-size: 18px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    }
+    .logout-btn { cursor: pointer; color: var(--accent-red); font-size: 22px; transition: transform 0.2s; padding: 8px; }
+    .logout-btn:hover { transform: scale(1.1); }
+    .content-scroll { flex: 1; overflow-y: auto; padding: 40px; scroll-behavior: smooth; }
+
+    /* --- 4. 设置页专属样式 --- */
+    .setting-card {
+        background: var(--card-bg); padding: 40px; border-radius: 16px;
+        max-width: 900px; margin: 0 auto;
+        border: 1px solid var(--border-color);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    }
+    .section-title {
+        font-size: 18px; font-weight: 600; color: #fff; margin-bottom: 20px;
+        border-left: 4px solid var(--accent-purple); padding-left: 12px;
+    }
+    .el-form-item__label { color: var(--text-secondary); }
+    .el-input__inner { background: #151521; border-color: var(--border-color); color: #fff; }
+    .el-input__inner:focus { border-color: var(--accent-purple); }
+    .el-divider { background-color: var(--border-color); }
+    .el-divider__text { background-color: var(--card-bg); color: var(--text-secondary); }
+
+    /* 表格样式 */
+    .el-table { background-color: transparent !important; }
+    .el-table th, .el-table tr { background-color: transparent !important; }
+    .el-table th { border-bottom: 1px solid var(--border-color) !important; color: var(--text-secondary); }
+    .el-table td { border-bottom: 1px solid var(--border-color) !important; color: var(--text-primary); }
+    .el-table--enable-row-hover .el-table__body tr:hover>td { background-color: rgba(255,255,255,0.05) !important; }
+
+    /* 滚动条 */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: var(--bg-color); }
+    ::-webkit-scrollbar-thumb { background: #3b3b58; border-radius: 4px; }
+
+    /* --- ✅ 5. 纯文本大弹窗样式 (核心修改) --- */
+
+    /* 弹窗本体样式修正 */
+    .ai-pure-text-dialog {
+        /* 高度强制拉大 */
+        height: 80vh !important;
+        margin-top: 5vh !important;
+        display: flex;
+        flex-direction: column;
+        background-color: #2b2b40 !important;
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 8px;
+    }
+
+    .ai-pure-text-dialog .el-dialog__body {
+        flex: 1;
+        overflow: hidden;
+        padding: 0 !important; /* 去掉内边距，交给内部容器 */
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* 文本内容框 */
+    .text-content-box {
+        flex: 1;
+        background-color: #1e1e2d;
+        color: #e1e1e6;
+        padding: 40px;            /* 宽敞的内边距 */
+        margin: 20px;             /* 给一点外边距 */
+        border-radius: 8px;
+        font-size: 16px;          /* 字体大 */
+        line-height: 1.8;         /* 行高大 */
+        white-space: pre-wrap;    /* 🔥 核心：保留换行符 */
+        overflow-y: auto;         /* 垂直滚动 */
+        font-family: 'Microsoft YaHei', sans-serif;
+        border: 1px solid #3b3b4d;
+    }
+</style>
+</head>
+<body>
+
+<div id="app">
+    <div class="sidebar">
+        <div class="logo-area"><i class="el-icon-monitor"></i> XiMA 智造</div>
+        <div class="nav-menu">
+            <div class="nav-item" @click="goToPage('index.html')">
+                <i class="el-icon-menu"></i> 项目概览
+            </div>
+            <div class="nav-item" @click="goToPage('plan-config.html')">
+                <i class="el-icon-date"></i> 计划进度
+            </div>
+            <div class="nav-item" @click="goToPage('import.html')">
+                <i class="el-icon-upload"></i> 项目导入
+            </div>
+            <div class="nav-item active"> <i class="el-icon-setting"></i> 系统设置
+            </div>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="top-header">
+            <div class="page-title"><h2>系统配置中心</h2></div>
+            <div class="user-profile">
+                <div class="user-info">
+                    <div class="user-name">{{ username }}</div>
+                    <div class="user-role">管理员</div>
+                </div>
+                <div class="avatar">{{ username.substring(0,1).toUpperCase() }}</div>
+                <i class="el-icon-switch-button logout-btn" @click="logout" title="退出登录"></i>
+            </div>
+        </div>
+
+        <div class="content-scroll">
+            <div class="setting-card">
+                <div class="section-title">通知订阅设置</div>
+                <el-form label-width="120px" :model="form">
+                    <el-form-item label="接收邮箱">
+                        <el-input v-model="form.email" style="width: 280px;" @input="checkEmailChange" placeholder="请输入您的邮箱"></el-input>
+                        <el-button
+                            v-if="form.email !== originalEmail"
+                            type="warning" plain size="small"
+                            @click="sendCode"
+                            :disabled="coding || time > 0"
+                            style="margin-left: 10px;">
+                            {{ time > 0 ? time + 's' : '发送验证码' }}
+                        </el-button>
+                    </el-form-item>
+
+                    <el-form-item label="验证码" v-if="form.email !== originalEmail">
+                        <el-input v-model="form.code" style="width: 150px;" placeholder="6位验证码"></el-input>
+                        <span style="color: #ea5455; font-size: 12px; margin-left: 10px;">
+                            <i class="el-icon-warning"></i> 检测到邮箱变更，需验证后保存
+                        </span>
+                    </el-form-item>
+
+                    <el-form-item label="每日报告时间">
+                        <el-time-select v-model="form.reportTime" :picker-options="{ start: '06:00', step: '01:00', end: '23:00' }" placeholder="选择推送时间">
+                        </el-time-select>
+                        <el-button type="text" @click="form.reportTime = ''" style="color: var(--text-secondary); margin-left: 10px;">清空 (暂不发送)</el-button>
+                    </el-form-item>
+
+                    <el-divider content-position="left">项目 AI 日报管理</el-divider>
+
+                    <el-table :data="form.projectSettings" style="width: 100%;">
+                        <el-table-column prop="projectName" label="项目名称"></el-table-column>
+                        <el-table-column label="AI 智能日报" width="150">
+                            <template slot-scope="scope">
+                                <el-switch
+                                    v-model="scope.row.enableAiReport"
+                                    active-color="#7367f0"
+                                    inactive-color="#3b3b4d">
+                                </el-switch>
+                            </template>
+                        </el-table-column>
+                        <el-table-column label="操作" width="150">
+                            <template slot-scope="scope">
+                                <el-button type="text" icon="el-icon-view" @click="previewReport(scope.row)">预览日报</el-button>
+                            </template>
+                        </el-table-column>
+                    </el-table>
+
+                    <div style="margin-top: 40px; text-align: center;">
+                        <el-button type="primary" @click="save" :loading="saving" icon="el-icon-check">保存所有设置</el-button>
+                    </div>
+                </el-form>
+            </div>
+        </div>
+    </div>
+
+    <el-dialog
+        :title="'【' + previewProjectName + '】AI 智能深度分析报告'"
+        :visible.sync="previewVisible"
+        width="1500px"
+        top="5vh"
+        append-to-body
+        custom-class="ai-pure-text-dialog">
+
+        <div v-if="previewLoading" style="text-align: center; padding: 120px 0;">
+            <i class="el-icon-loading" style="font-size: 50px; color: #7367f0;"></i>
+            <p style="margin-top: 20px; font-size: 18px; color: #fff;">
+                正在分析 {{ form.reportTime || '实时' }} 工程数据...
+            </p>
+        </div>
+
+        <div v-else class="text-content-box" style="height: 65vh; overflow-y: auto; background-color: #1e1e2d; padding: 40px; border-radius: 8px; border: 1px solid #3b3b4d;">
+            <div style="white-space: pre-wrap; color: #e1e1e6; font-size: 16px; line-height: 1.8; font-family: 'Microsoft YaHei', sans-serif;">{{ previewContent }}</div>
+        </div>
+
+        <span slot="footer">
+            <el-button @click="previewVisible = false" size="medium">关 闭</el-button>
+            <el-button type="primary" @click="previewVisible = false" size="medium" icon="el-icon-document-copy">复制报告</el-button>
+        </span>
+    </el-dialog>
+
+</div>
+
+<script src="https://unpkg.com/vue@2/dist/vue.js"></script>
+<script src="https://unpkg.com/element-ui/lib/index.js"></script>
+<script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+<script>
+    new Vue({
+        el: '#app',
+        data: {
+            username: '',
+            form: { email: '', code: '', reportTime: '', projectSettings: [] },
+            originalEmail: '',
+            time: 0,
+            coding: false,
+            saving: false,
+            // 预览相关
+            previewVisible: false,
+            previewLoading: false,
+            previewContent: '',
+            previewProjectName: ''
+        },
+        created() {
+            this.checkLogin();
+            this.loadData();
+        },
+        methods: {
+            checkLogin() {
+                const token = localStorage.getItem('token');
+                const user = localStorage.getItem('username');
+                if (!token) { window.location.href = 'login.html'; return; }
+                this.username = user || 'Admin';
+            },
+            goToPage(url) {
+                if(url === 'plan-config.html') localStorage.removeItem('fromDashboard');
+                window.location.href = url;
+            },
+            logout() {
+                localStorage.removeItem('token');
+                window.location.href = 'login.html';
+            },
+            loadData() {
+                const token = localStorage.getItem('token');
+                axios.get('/api/settings/info', { headers: { 'Authorization': 'Bearer ' + token } })
+                    .then(res => {
+                        const d = res.data.data;
+                        this.form.email = d.email;
+                        this.originalEmail = d.email;
+                        this.form.reportTime = d.reportTime;
+                        this.form.projectSettings = d.projects.map(p => ({
+                            id: p.id,
+                            projectName: p.projectName,
+                            enableAiReport: p.enableAiReport === 1
+                        }));
+                    });
+            },
+            // ✅ 新增：调用后端真实数据接口
+            previewReport(project) {
+                this.previewProjectName = project.projectName;
+                this.previewVisible = true;
+                this.previewLoading = true;
+                this.previewContent = '';
+
+                const token = localStorage.getItem('token');
+
+                axios.post('/api/settings/preview-report', { projectId: project.id }, {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                }).then(res => {
+                    if(res.data.code === 200) {
+                        this.previewContent = res.data.data;
+                    } else {
+                        this.previewContent = '<p style="color:red">生成失败: ' + res.data.message + '</p>';
+                    }
+                }).catch(err => {
+                    this.previewContent = '<p style="color:red">网络错误或服务不可用</p>';
+                }).finally(() => {
+                    this.previewLoading = false;
+                });
+            },
+            sendCode() {
+                this.coding = true;
+                axios.post('/api/settings/send-verify', { email: this.form.email })
+                    .then(res => {
+                        if(res.data.code === 200) {
+                            this.$message.success('验证码已发送至新邮箱');
+                            this.time = 60;
+                            const timer = setInterval(() => { this.time--; if(this.time<=0) clearInterval(timer); }, 1000);
+                        } else this.$message.error(res.data.message);
+                    }).finally(() => this.coding = false);
+            },
+            save() {
+                this.saving = true;
+                const token = localStorage.getItem('token');
+                axios.post('/api/settings/save', this.form, { headers: { 'Authorization': 'Bearer ' + token } })
+                    .then(res => {
+                        if(res.data.code === 200) {
+                            this.$message.success('配置已更新');
+                            this.originalEmail = this.form.email;
+                            this.form.code = '';
+                        } else this.$message.error(res.data.message);
+                    }).finally(() => this.saving = false);
+            },
+            checkEmailChange() {}
+        }
+    })
+</script>
+</body>
+</html>

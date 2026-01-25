@@ -8,4 +8,5 @@ public interface ProgressService {
     void updateStatus(String key, String status);
     String getStatus(String key);
     void calculateProjectProgress(Integer projectId);
+    String getProjectFullStatusJson(Integer projectId);
 }

@@ -27,5 +27,10 @@ public class SysProject {
     private Integer createdBy;
     private LocalDateTime createdAt;
 
+    /**
+     * 是否开启每日AI进度监察报告 (1=开启, 0=关闭)
+     */
+    private Integer enableAiReport;
+
     // 注意：boundaryCoords 字段已被移除，现已迁移至 SysBuilding 表中
 }

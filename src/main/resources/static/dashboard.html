@@ -387,6 +387,41 @@
         .empty-state i { font-size: 48px; margin-bottom: 20px; opacity: 0.5; }
         .empty-state p { font-size: 16px; }
 
+        .ai-float-ball {
+            position: fixed;
+            top: 50%;
+            right: 30px;
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #7367f0, #ce9ffc);
+            border-radius: 50%;
+            box-shadow: 0 4px 15px rgba(115, 103, 240, 0.4);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            cursor: pointer;
+            z-index: 999;
+            transition: transform 0.3s;
+            user-select: none;
+            touch-action: none;
+        }
+        .ai-float-ball:hover { transform: scale(1.1); }
+        .ai-float-ball i { font-size: 24px; margin-bottom: 2px; }
+        .ai-float-ball span { font-size: 10px; }
+
+        .ai-result-box {
+            background: #f5f5f7;
+            padding: 15px;
+            border-radius: 8px;
+            line-height: 1.6;
+            color: #333;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap; /* 保留换行 */
+        }
+
     </style>
 </head>
 <body>
@@ -413,6 +448,34 @@
             </div>
         </div>
     </div>
+
+    <div class="ai-float-ball"
+         @click="handleBallClick"
+         @mousedown="startDrag"
+         :style="{ left: ballLeft + 'px', top: ballTop + 'px', right: 'auto' }"
+         ref="aiBall">
+        <i class="el-icon-s-custom"></i>
+        <span>AI 分析</span>
+    </div>
+
+    <el-dialog title="AI 智能项目分析" :visible.sync="showAiDialog" width="500px">
+        <div v-loading="aiLoading" element-loading-text="Kimi 正在思考中...">
+            <div v-if="!aiResult" class="ai-empty">
+                <p>点击下方按钮，让 AI 为您分析当前项目进度的风险与建议。</p>
+            </div>
+            <div v-else class="ai-result-box">
+                <div class="ai-avatar"><i class="el-icon-s-custom"></i></div>
+                <div class="ai-text">{{ aiResult }}</div>
+            </div>
+        </div>
+        <span slot="footer" class="dialog-footer">
+            <el-button @click="showAiDialog = false">关 闭</el-button>
+            <el-button type="primary" @click="doAiAnalysis" :disabled="aiLoading">开始分析</el-button>
+            <el-button type="success" @click="sendAiMail" :disabled="!aiResult || sendingMail" icon="el-icon-message">
+                {{ sendingMail ? '发送中...' : '发送至邮箱' }}
+            </el-button>
+        </span>
+    </el-dialog>
 
     <div class="main-content">
         <div class="header">
@@ -562,7 +625,18 @@
                 delayedCount: 0,
                 normalCount: 0,
                 buildings: []
-            }
+            },
+            showAiDialog: false, // 控制弹窗显示
+            aiLoading: false,    // 控制AI思考中的加载状态
+            aiResult: '',        // 存储AI分析的文字结果
+            sendingMail: false ,  // 控制邮件发送中的状态
+            // === 新增拖拽相关变量 ===
+            ballLeft: document.documentElement.clientWidth - 80, // 初始靠右
+            ballTop: document.documentElement.clientHeight / 2 - 30, // 初始居中
+            isDragging: false,
+            hasDragged: false, // 判断是点击还是拖拽
+            dragStartX: 0,
+            dragStartY: 0,
         },
         mounted() {
             // 尝试读取上次的项目ID，如果URL中没有参数，则使用缓存
@@ -779,6 +853,73 @@
                         chartTrend.resize(); chartHeight.resize(); chartDiff.resize();
                     });
                 });
+            },
+
+            // === 1. 修复 AI 请求 (加入 Token) ===
+            doAiAnalysis() {
+                this.aiLoading = true;
+                const token = localStorage.getItem('token'); // 获取 Token
+
+                axios.post('/api/ai/analyze',
+                    { projectId: this.projectId },
+                    { headers: { 'Authorization': token ? 'Bearer ' + token : '' } } // ✅ 加上 Header
+                )
+                .then(res => {
+                    // 兼容 code 和 status
+                    if ((res.data.code || res.data.status) === 200) {
+                        this.aiResult = res.data.data;
+                    } else {
+                        this.$message.error(res.data.message || "分析失败");
+                    }
+                })
+                .catch(err => this.$message.error("请求AI服务失败: " + err))
+                .finally(() => this.aiLoading = false);
+            },
+
+            sendAiMail() {
+                this.sendingMail = true;
+                const token = localStorage.getItem('token'); // 获取 Token
+
+                axios.post('/api/ai/send-report',
+                    { projectId: this.projectId, content: this.aiResult },
+                    { headers: { 'Authorization': token ? 'Bearer ' + token : '' } } // ✅ 加上 Header
+                )
+                .then(res => {
+                    if ((res.data.code || res.data.status) === 200) {
+                        this.$message.success("邮件已发送！");
+                    } else {
+                        this.$message.error(res.data.message);
+                    }
+                })
+                .finally(() => this.sendingMail = false);
+            },
+            // === 2. 悬浮球拖拽逻辑 ===
+            startDrag(e) {
+                this.isDragging = true;
+                this.hasDragged = false;
+                this.dragStartX = e.clientX - this.ballLeft;
+                this.dragStartY = e.clientY - this.ballTop;
+
+                // 绑定全局事件，防止拖出 div 丢失焦点
+                document.addEventListener('mousemove', this.onDrag);
+                document.addEventListener('mouseup', this.stopDrag);
+            },
+            onDrag(e) {
+                if (!this.isDragging) return;
+                this.hasDragged = true;
+                this.ballLeft = e.clientX - this.dragStartX;
+                this.ballTop = e.clientY - this.dragStartY;
+            },
+            stopDrag() {
+                this.isDragging = false;
+                document.removeEventListener('mousemove', this.onDrag);
+                document.removeEventListener('mouseup', this.stopDrag);
+            },
+            handleBallClick() {
+                // 如果只是点击（没有发生拖拽），才打开弹窗
+                if (!this.hasDragged) {
+                    this.showAiDialog = true;
+                }
             }
         }
     })
