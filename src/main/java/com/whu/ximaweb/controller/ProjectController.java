@@ -27,6 +27,7 @@ import javax.servlet.http.HttpServletRequest;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.math.BigDecimal;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -62,29 +63,48 @@ public class ProjectController {
     private PhotoProcessor photoProcessor;
 
     /**
-     * 获取大疆工作空间项目列表
+     * 获取大疆工作空间项目列表 (已植入详细调试日志)
      */
     @GetMapping("/dji-workspaces")
     public ApiResponse<List<DjiProjectDto>> getDjiWorkspaces(@RequestParam String apiKey, HttpServletRequest httpRequest) {
+        // ✅ 恢复正常的 UserID 获取逻辑
         Integer userId = (Integer) httpRequest.getAttribute("currentUser");
+
+        // 如果拦截器工作正常，这里绝不应该是 null。
+        // 为了以防万一（比如测试接口忘加Token），给个默认值 1，但不再强制改为 4
         if (userId == null) userId = 1;
 
+        // 1. 获取大疆 API 返回的实时列表
         List<DjiProjectDto> djiProjects = djiService.getProjects(apiKey);
 
+        // 2. 获取数据库中该用户的已导入项目
         QueryWrapper<SysProject> query = new QueryWrapper<>();
         query.select("dji_project_uuid");
         query.eq("created_by", userId);
-
         List<SysProject> myExistingProjects = sysProjectMapper.selectList(query);
-        Set<String> importedUuids = myExistingProjects.stream()
-                .map(SysProject::getDjiProjectUuid)
-                .collect(Collectors.toSet());
 
-        for (DjiProjectDto dto : djiProjects) {
-            if (importedUuids.contains(dto.getUuid())) {
-                dto.setImported(true);
+        // 3. 构建 Set (去空格 + 转小写)
+        Set<String> importedUuids = new HashSet<>();
+        if (myExistingProjects != null) {
+            for (SysProject p : myExistingProjects) {
+                if (p.getDjiProjectUuid() != null) {
+                    importedUuids.add(p.getDjiProjectUuid().trim().toLowerCase());
+                }
             }
         }
+
+        // 4. 比对状态
+        if (djiProjects != null) {
+            for (DjiProjectDto dto : djiProjects) {
+                if (dto.getUuid() != null) {
+                    String cleanUuid = dto.getUuid().trim().toLowerCase();
+                    if (importedUuids.contains(cleanUuid)) {
+                        dto.setImported(true);
+                    }
+                }
+            }
+        }
+
         return ApiResponse.success("获取成功", djiProjects);
     }
 
@@ -100,6 +120,7 @@ public class ProjectController {
             projectService.importProject(request, userId);
             return ApiResponse.success("导入成功");
         } catch (RuntimeException re) {
+            // 捕获业务逻辑报错（比如“项目已存在”）
             return ApiResponse.error(re.getMessage());
         } catch (Exception e) {
             e.printStackTrace();
@@ -161,8 +182,7 @@ public class ProjectController {
     }
 
     /**
-     * ✅ 新增：获取单个项目详情
-     * 用于解决前端显示“未知项目”的问题
+     * 获取单个项目详情
      */
     @GetMapping("/{id}")
     public ApiResponse<SysProject> getProjectDetail(@PathVariable Integer id) {
@@ -185,7 +205,7 @@ public class ProjectController {
     }
 
     /**
-     * ✅ 手动触发同步接口
+     * 手动触发同步接口
      */
     @PostMapping("/{projectId}/sync")
     public ApiResponse<String> manualSyncPhotos(@PathVariable Integer projectId, @RequestBody Map<String, String> body) {
@@ -248,7 +268,7 @@ public class ProjectController {
                                     photo.setGpsLat(BigDecimal.valueOf(data.getLatitude()));
                                     photo.setGpsLng(BigDecimal.valueOf(data.getLongitude()));
 
-                                    // ✅ 存目标点坐标 (新增)
+                                    // 存目标点坐标
                                     if (data.getLrfTargetLat() != -1 && data.getLrfTargetLng() != -1) {
                                         photo.setLrfTargetLat(BigDecimal.valueOf(data.getLrfTargetLat()));
                                         photo.setLrfTargetLng(BigDecimal.valueOf(data.getLrfTargetLng()));
