@@ -191,7 +191,15 @@
         <div class="content-scroll">
             <div class="setting-card">
                 <div class="section-title">通知订阅设置</div>
+
                 <el-form label-width="120px" :model="form">
+                    <el-form-item label="您的称呼">
+                        <el-input v-model="form.realName" style="width: 280px;" placeholder="例如：张经理"></el-input>
+                        <span style="color: var(--text-secondary); font-size: 12px; margin-left: 10px;">
+                            (将显示在邮件日报的开头)
+                        </span>
+                    </el-form-item>
+
                     <el-form-item label="接收邮箱">
                         <el-input v-model="form.email" style="width: 280px;" @input="checkEmailChange" placeholder="请输入您的邮箱"></el-input>
                         <el-button
@@ -280,7 +288,7 @@
         el: '#app',
         data: {
             username: '',
-            form: { email: '', code: '', reportTime: '', projectSettings: [] },
+            form: { realName: '',email: '', code: '', reportTime: '', projectSettings: [] },
             originalEmail: '',
             time: 0,
             coding: false,
@@ -315,6 +323,7 @@
                 axios.get('/api/settings/info', { headers: { 'Authorization': 'Bearer ' + token } })
                     .then(res => {
                         const d = res.data.data;
+                        this.form.realName = d.realName;
                         this.form.email = d.email;
                         this.originalEmail = d.email;
                         this.form.reportTime = d.reportTime;

@@ -49,6 +49,7 @@ public class SystemSettingsController {
 
         return ApiResponse.success("获取成功", Map.of(
             "email", user.getEmail(),
+            "realName", user.getRealName() == null ? "" : user.getRealName(),
             "reportTime", user.getReportTime() == null ? "" : user.getReportTime(),
             "projects", projects
         ));
@@ -76,6 +77,7 @@ public class SystemSettingsController {
         String newEmail = (String) body.get("email");
         String code = (String) body.get("code");
         String reportTime = (String) body.get("reportTime"); // "09:00" or ""
+        String realName = (String) body.get("realName");
 
         // 1. 如果修改了邮箱，必须校验验证码
         if (!newEmail.equals(user.getEmail())) {
@@ -83,6 +85,11 @@ public class SystemSettingsController {
                 return ApiResponse.error("验证码错误或已过期");
             }
             user.setEmail(newEmail);
+        }
+
+        // 更新姓名
+        if (realName != null && !realName.trim().isEmpty()) {
+            user.setRealName(realName);
         }
 
         // 2. 更新推送时间

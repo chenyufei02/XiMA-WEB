@@ -23,6 +23,10 @@
                     <el-input v-model="form.username" placeholder="请输入用户名"></el-input>
                 </el-form-item>
 
+                <el-form-item label="真实姓名" prop="realName">
+                    <el-input v-model="form.realName" placeholder="（选填）请输入您的称呼"></el-input>
+                </el-form-item>
+
                 <el-form-item label="密码" prop="password">
                     <el-input v-model="form.password" type="password" placeholder="设置密码"></el-input>
                 </el-form-item>
@@ -67,6 +71,7 @@
                 form: {
                     username: '',
                     password: '',
+                    realName: '',
                     phone: '',
                     email: '',
                     code: ''

@@ -4,8 +4,10 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.whu.ximaweb.dto.dji.DjiMediaFileDto;
 import com.whu.ximaweb.model.ProjectPhoto;
 import com.whu.ximaweb.model.SysProject;
+import com.whu.ximaweb.model.SysTaskLog; // ✅ 新增
 import com.whu.ximaweb.mapper.ProjectPhotoMapper;
 import com.whu.ximaweb.mapper.SysProjectMapper;
+import com.whu.ximaweb.mapper.SysTaskLogMapper; // ✅ 新增
 import com.whu.ximaweb.service.DjiService;
 import com.whu.ximaweb.service.ObsService;
 import com.whu.ximaweb.service.PhotoProcessor;
@@ -38,6 +40,9 @@ public class PhotoSyncTask {
 
     @Autowired
     private ProjectPhotoMapper projectPhotoMapper;
+
+    @Autowired
+    private SysTaskLogMapper sysTaskLogMapper; // ✅ 新增：用于记录监控日志
 
     @Autowired
     private DjiService djiService;
@@ -85,6 +90,14 @@ public class PhotoSyncTask {
                 );
 
                 if (djiFiles.isEmpty()) {
+                    // 即使没有新照片，也记录一次"连接成功"的心跳日志，让面板显示"最近同步：刚刚"
+                    SysTaskLog log = new SysTaskLog();
+                    log.setProjectId(project.getId());
+                    log.setTaskType(SysTaskLog.TYPE_PHOTO_SYNC);
+                    log.setStatus(1);
+                    log.setMessage("连接正常，当前无新照片");
+                    sysTaskLogMapper.insert(log);
+
                     System.out.println("    ⚪ 未发现新照片，跳过后续处理。");
                     continue;
                 }
@@ -224,8 +237,33 @@ public class PhotoSyncTask {
                     System.out.println("    💤 本次无新照片，跳过 Actual 表计算以节约资源。");
                 }
 
+                // ✅ 9. [新增] 记录监控日志 (保证有新数据时记录，或者至少记录一次同步成功)
+                SysTaskLog log = new SysTaskLog();
+                log.setProjectId(project.getId());
+                log.setTaskType(SysTaskLog.TYPE_PHOTO_SYNC);
+                log.setStatus(1);
+                if (successCount > 0) {
+                    log.setMessage("同步完成，新增照片 " + successCount + " 张");
+                } else {
+                    log.setMessage("检查完毕，无新内容");
+                }
+                sysTaskLogMapper.insert(log);
+
             } catch (Exception e) {
                 System.err.println("❌ 项目处理异常: " + e.getMessage());
+
+                // ✅ 10. [新增] 记录异常日志
+                try {
+                    SysTaskLog errorLog = new SysTaskLog();
+                    errorLog.setProjectId(project.getId());
+                    errorLog.setTaskType(SysTaskLog.TYPE_PHOTO_SYNC);
+                    errorLog.setStatus(0);
+                    errorLog.setMessage("同步异常: " + e.getMessage());
+                    sysTaskLogMapper.insert(errorLog);
+                } catch (Exception ex) {
+                    // 防止日志记录本身失败导致循环报错，吞掉
+                }
+
                 e.printStackTrace();
             }
         }

@@ -160,6 +160,54 @@
             scroll-behavior: smooth;
         }
 
+        /* 🔥 [新增] 自动化监控驾驶舱样式 */
+        .monitor-dashboard {
+            background: #232333; border: 1px solid #3b3b4f; border-radius: 16px;
+            margin-bottom: 35px; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+        }
+        .monitor-header {
+            background: rgba(0,0,0,0.2); padding: 15px 25px; border-bottom: 1px solid var(--border-color);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .monitor-title { font-size: 16px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 10px; }
+        .monitor-body { display: flex; padding: 25px; gap: 30px; }
+
+        .monitor-panel {
+            flex: 1; background: rgba(40, 40, 60, 0.4); border-radius: 12px;
+            padding: 20px; border: 1px solid rgba(255,255,255,0.05); position: relative;
+        }
+        .monitor-panel.dji { border-top: 3px solid var(--accent-blue); }
+        .monitor-panel.report { border-top: 3px solid var(--accent-green); }
+
+        .panel-head { display: flex; justify-content: space-between; margin-bottom: 20px; }
+        .panel-title { font-size: 14px; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+
+        .status-indicator {
+            display: flex; align-items: center; gap: 8px; font-size: 12px;
+            padding: 4px 10px; border-radius: 20px;
+            background: rgba(40, 199, 111, 0.1); color: var(--accent-green); border: 1px solid rgba(40, 199, 111, 0.2);
+        }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-green); box-shadow: 0 0 8px var(--accent-green); animation: pulse 2s infinite; }
+        @keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.2); } 100% { opacity: 1; transform: scale(1); } }
+
+        .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .metric-item { display: flex; flex-direction: column; gap: 5px; }
+        .metric-label { font-size: 12px; color: var(--text-muted); }
+        .metric-value { font-size: 18px; color: #fff; font-weight: 600; font-family: 'Consolas', monospace; }
+        .countdown-box { margin-top: 15px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 8px; text-align: center; }
+        .countdown-val { font-size: 14px; color: var(--accent-yellow); font-weight: bold; }
+
+        .log-terminal {
+            background: #101015; padding: 15px; border-top: 1px solid var(--border-color);
+            font-family: 'Consolas', monospace; font-size: 12px; color: #ccc;
+            height: 120px; overflow-y: auto;
+        }
+        .log-line { margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.02); padding-bottom: 2px; }
+        .log-time { color: #666; margin-right: 10px; }
+        .log-tag.info { color: var(--accent-blue); }
+        .log-tag.success { color: var(--accent-green); }
+        .log-tag.error { color: var(--accent-red); }
+
         /* --- 4. 统计卡片区 (Stats Cards) --- */
         .overview-row {
             display: flex;
@@ -519,6 +567,68 @@
             </div>
 
             <div v-else>
+                <div class="monitor-dashboard">
+                    <div class="monitor-header">
+                        <div class="monitor-title"><i class="el-icon-monitor"></i> 自动化监控情况展示 (Auto-Monitor Hub)</div>
+                        <div style="font-size:12px; color:rgba(255,255,255,0.5)">System Online • 实时刷新中</div>
+                    </div>
+                    <div class="monitor-body">
+                        <div class="monitor-panel dji">
+                            <div class="panel-head">
+                                <span class="panel-title"><i class="el-icon-camera"></i> 司空2 无人机巡检</span>
+                                <div class="status-indicator"><div class="status-dot"></div> 自动同步开启</div>
+                            </div>
+                            <div class="metrics-grid">
+                                <div class="metric-item">
+                                    <span class="metric-label">累计采集(张)</span>
+                                    <span class="metric-value">{{ monitorData.totalPhotos || 0 }}</span>
+                                </div>
+                                <div class="metric-item">
+                                    <span class="metric-label">上次同步时间</span>
+                                    <span class="metric-value" style="font-size:14px; margin-top:3px;">{{ monitorData.lastSyncTime || '未知' }}</span>
+                                </div>
+                            </div>
+                            <div class="countdown-box">
+                                <span style="font-size:12px; color:#aaa; margin-right:5px;">距离下次同步:</span>
+                                <span class="countdown-val">{{ monitorData.nextSyncTime || '--' }}</span>
+                            </div>
+                        </div>
+
+                        <div class="monitor-panel report">
+                            <div class="panel-head">
+                                <span class="panel-title"><i class="el-icon-message"></i> 智能项目日报</span>
+                                <div class="status-indicator" style="background:rgba(115,103,240,0.1); color:var(--accent-purple); border-color:rgba(115,103,240,0.2);">
+                                    <div class="status-dot" style="background:var(--accent-purple); box-shadow:0 0 8px var(--accent-purple);"></div>
+                                    {{ monitorData.reportEnabled ? '每日推送中' : '服务暂停' }}
+                                </div>
+                            </div>
+                            <div class="metrics-grid">
+                                <div class="metric-item">
+                                    <span class="metric-label">安全运行(天)</span>
+                                    <span class="metric-value">{{ monitorData.runDays || 0 }}</span>
+                                </div>
+                                <div class="metric-item">
+                                    <span class="metric-label">累计汇报(封)</span>
+                                    <span class="metric-value">{{ monitorData.totalReports || 0 }}</span>
+                                </div>
+                            </div>
+                            <div class="countdown-box">
+                                <span style="font-size:12px; color:#aaa; margin-right:5px;">下次发送:</span>
+                                <span class="countdown-val">{{ monitorData.nextReportTime || '--' }}</span>
+                                <div style="font-size:10px; color:#666; margin-top:3px;">接收人: {{ monitorData.receiverName || '管理员' }}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="log-terminal">
+                        <div v-if="!monitorData.logs || monitorData.logs.length === 0" style="padding:10px;">暂无日志...</div>
+                        <div v-for="(log, i) in monitorData.logs" :key="i" class="log-line">
+                            <span class="log-time">[{{ log.time }}]</span>
+                            <span :class="['log-tag', log.type.toLowerCase()]">[{{ log.type }}]</span>
+                            <span style="margin-left:8px;">{{ log.message }}</span>
+                        </div>
+                    </div>
+                </div>
                 <div class="overview-row">
                     <div class="stat-card purple">
                         <div class="stat-icon-box" style="color:var(--accent-purple)"><i class="el-icon-time"></i></div>
@@ -624,7 +734,14 @@
                 safeRunDays: 0,
                 delayedCount: 0,
                 normalCount: 0,
-                buildings: []
+                buildings: [],
+                // 🔥 [新增] 监控数据
+                monitorData: {
+                    djiConnected: false, totalPhotos: 0, lastSyncTime: '--', nextSyncTime: '--',
+                    reportEnabled: false, runDays: 0, totalReports: 0, lastReportTime: '--', nextReportTime: '--', receiverName: '--',
+                    logs: []
+                },
+                monitorTimer: null,
             },
             showAiDialog: false, // 控制弹窗显示
             aiLoading: false,    // 控制AI思考中的加载状态
@@ -643,6 +760,12 @@
             const pid = localStorage.getItem('currentProjectId');
             if(pid) this.projectId = pid;
             this.fetchData();
+            // 🔥 [新增] 启动监控数据刷新
+            this.fetchMonitorData();
+            this.monitorTimer = setInterval(this.fetchMonitorData, 30000);
+        },
+        beforeDestroy() {
+            if (this.monitorTimer) clearInterval(this.monitorTimer);
         },
         methods: {
             // 返回首页
@@ -687,12 +810,14 @@
             handleSyncDji() {
                 this.syncing = true;
                 const token = localStorage.getItem('token');
-                axios.post(`/api/projects/${this.projectId}/sync`, {}, {
-                    headers: { 'Authorization': token ? 'Bearer ' + token : '' }
-                }).then(res => {
+                axios.post(`/api/projects/${this.projectId}/sync`, {}, { headers: { 'Authorization': token ? 'Bearer ' + token : '' } })
+                .then(res => {
                     if((res.data.code || res.data.status) === 200) {
-                        this.$message.success("云端照片同步任务已触发！");
-                        setTimeout(() => this.fetchData(), 2000);
+                        this.$message.success("云端照片同步任务已完成！");
+
+                        // 🔥 [修改] 去掉 setTimeout，直接刷新，并加一个随机参数防止缓存
+                        this.fetchData();
+                        this.fetchMonitorData();
                     } else {
                         this.$message.error(res.data.message || "同步指令发送失败");
                     }
@@ -749,6 +874,16 @@
                     this.$message.error("网络请求异常");
                     this.loading = false;
                 });
+            },
+            // 🔥 [新增] 获取监控面板数据接口
+            fetchMonitorData() {
+                const token = localStorage.getItem('token');
+                axios.get(`/api/projects/${this.projectId}/monitor`, { headers: { 'Authorization': token ? 'Bearer ' + token : '' } })
+                .then(res => {
+                    if((res.data.code || res.data.status) === 200) {
+                        this.monitorData = res.data.data;
+                    }
+                }).catch(console.error);
             },
 
             // ECharts 渲染逻辑
@@ -887,6 +1022,7 @@
                 .then(res => {
                     if ((res.data.code || res.data.status) === 200) {
                         this.$message.success("邮件已发送！");
+                        this.fetchMonitorData();
                     } else {
                         this.$message.error(res.data.message);
                     }

@@ -3,14 +3,15 @@ package com.whu.ximaweb.controller;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.whu.ximaweb.dto.ApiResponse;
 import com.whu.ximaweb.dto.Coordinate;
+import com.whu.ximaweb.dto.MonitorVo; // ✅ 新增
 import com.whu.ximaweb.dto.ProjectImportRequest;
 import com.whu.ximaweb.dto.dji.DjiMediaFileDto;
 import com.whu.ximaweb.dto.dji.DjiProjectDto;
 import com.whu.ximaweb.mapper.ProjectPhotoMapper;
 import com.whu.ximaweb.mapper.SysProjectMapper;
-import com.whu.ximaweb.model.PhotoData;
-import com.whu.ximaweb.model.ProjectPhoto;
-import com.whu.ximaweb.model.SysProject;
+import com.whu.ximaweb.mapper.SysTaskLogMapper; // ✅ 新增
+import com.whu.ximaweb.mapper.SysUserMapper;    // ✅ 新增
+import com.whu.ximaweb.model.*;
 import com.whu.ximaweb.service.DjiService;
 import com.whu.ximaweb.service.ObsService;
 import com.whu.ximaweb.service.PhotoProcessor;
@@ -27,12 +28,15 @@ import javax.servlet.http.HttpServletRequest;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.math.BigDecimal;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.stream.Collectors;
+import java.text.SimpleDateFormat;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
+import java.util.*;
+import com.whu.ximaweb.mapper.SysTaskLogMapper;
+import com.whu.ximaweb.model.SysTaskLog;
 
 @RestController
 @RequestMapping("/api/projects")
@@ -54,6 +58,12 @@ public class ProjectController {
     private ProjectPhotoMapper projectPhotoMapper;
 
     @Autowired
+    private SysTaskLogMapper sysTaskLogMapper; // ✅ 注入日志操作
+
+    @Autowired
+    private SysUserMapper sysUserMapper; // ✅ 注入用户操作(用于获取日报时间)
+
+    @Autowired
     private OkHttpClient okHttpClient;
 
     @Autowired
@@ -63,27 +73,125 @@ public class ProjectController {
     private PhotoProcessor photoProcessor;
 
     /**
-     * 获取大疆工作空间项目列表 (已植入详细调试日志)
+     * [新增接口] 获取项目的自动化监控面板数据
      */
+    @GetMapping("/{id}/monitor")
+    public ApiResponse<MonitorVo> getMonitorData(@PathVariable Integer id) {
+        SysProject project = sysProjectMapper.selectById(id);
+        if (project == null) return ApiResponse.error("项目不存在");
+
+        MonitorVo vo = new MonitorVo();
+
+        // 🔥 [修复1] 强制设置中国时区，解决时间显示不对的问题
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        sdf.setTimeZone(TimeZone.getTimeZone("Asia/Shanghai"));
+
+        // 🔥 [修复2] 日志时间格式增加年月日
+        SimpleDateFormat timeSdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        timeSdf.setTimeZone(TimeZone.getTimeZone("Asia/Shanghai"));
+
+        // 1. --- 左侧：司空2同步监控 ---
+        Long totalPhotos = projectPhotoMapper.selectCount(new QueryWrapper<ProjectPhoto>().eq("project_id", id));
+        vo.setTotalPhotos(totalPhotos);
+
+        Date lastSync = sysTaskLogMapper.selectLatestTime(id, SysTaskLog.TYPE_PHOTO_SYNC);
+        if (lastSync != null) {
+            vo.setLastSyncTime(sdf.format(lastSync));
+            vo.setDjiConnected(true);
+
+            Calendar cal = Calendar.getInstance();
+            cal.setTime(lastSync);
+            cal.add(Calendar.HOUR_OF_DAY, 1);
+
+            if (cal.getTime().before(new Date())) {
+                vo.setNextSyncTime("任务执行中...");
+            } else {
+                long diffMinutes = (cal.getTime().getTime() - System.currentTimeMillis()) / (1000 * 60);
+                vo.setNextSyncTime(diffMinutes + " 分钟后");
+            }
+        } else {
+            vo.setLastSyncTime("暂无记录");
+            vo.setDjiConnected(false);
+            vo.setNextSyncTime("等待初始化");
+        }
+
+        // 2. --- 右侧：日报监控 ---
+        vo.setReportEnabled(project.getEnableAiReport() != null && project.getEnableAiReport() == 1);
+
+        // 计算运行天数 (修复 getCreatedAt 调用)
+        if (project.getCreatedAt() != null) {
+            long days = ChronoUnit.DAYS.between(
+                    project.getCreatedAt().toLocalDate(),
+                    java.time.LocalDate.now()
+            );
+            vo.setRunDays(days <= 0 ? 1 : days);
+        } else {
+            vo.setRunDays(1L);
+        }
+
+        int reportCount = sysTaskLogMapper.countByProjectAndType(id, SysTaskLog.TYPE_DAILY_REPORT);
+        vo.setTotalReports(reportCount);
+
+        Date lastReport = sysTaskLogMapper.selectLatestTime(id, SysTaskLog.TYPE_DAILY_REPORT);
+        vo.setLastReportTime(lastReport != null ? sdf.format(lastReport) : "尚未发送");
+
+        SysUser creator = sysUserMapper.selectById(project.getCreatedBy());
+        if (creator != null && creator.getReportTime() != null) {
+            vo.setReceiverName(creator.getRealName() != null ? creator.getRealName() : creator.getUsername());
+
+            String reportTimeStr = creator.getReportTime();
+            LocalTime reportTime = LocalTime.parse(reportTimeStr, DateTimeFormatter.ofPattern("HH:mm"));
+            LocalDateTime now = LocalDateTime.now();
+            LocalDateTime nextRun = now.with(reportTime).withSecond(0);
+
+            if (now.isAfter(nextRun)) {
+                nextRun = nextRun.plusDays(1);
+            }
+
+            long hoursLeft = ChronoUnit.HOURS.between(now, nextRun);
+            long minutesLeft = ChronoUnit.MINUTES.between(now, nextRun) % 60;
+            vo.setNextReportTime(hoursLeft + "小时 " + minutesLeft + "分 后");
+
+        } else {
+            vo.setReceiverName("管理员");
+            vo.setNextReportTime("未设置时间");
+        }
+
+        // 3. --- 底部：日志流 ---
+        List<SysTaskLog> logs = sysTaskLogMapper.selectRecentLogs(id, 20);
+        List<MonitorVo.LogItem> logItems = new ArrayList<>();
+
+        if (logs != null) {
+            for (SysTaskLog log : logs) {
+                MonitorVo.LogItem item = new MonitorVo.LogItem();
+                item.setTime(timeSdf.format(log.getCreateTime())); // 使用修正后的带日期格式
+                item.setMessage(log.getMessage());
+
+                if (log.getStatus() == 0) item.setType("ERROR");
+                else if (SysTaskLog.TYPE_DAILY_REPORT.equals(log.getTaskType())) item.setType("SUCCESS");
+                else item.setType("INFO");
+
+                logItems.add(item);
+            }
+        }
+        vo.setLogs(logItems);
+
+        return ApiResponse.success("获取监控数据成功", vo);
+    }
+
+    // =========================================================================
+    // 下面是原有的接口，保持不变
+    // =========================================================================
+
     @GetMapping("/dji-workspaces")
     public ApiResponse<List<DjiProjectDto>> getDjiWorkspaces(@RequestParam String apiKey, HttpServletRequest httpRequest) {
-        // ✅ 恢复正常的 UserID 获取逻辑
         Integer userId = (Integer) httpRequest.getAttribute("currentUser");
-
-        // 如果拦截器工作正常，这里绝不应该是 null。
-        // 为了以防万一（比如测试接口忘加Token），给个默认值 1，但不再强制改为 4
         if (userId == null) userId = 1;
-
-        // 1. 获取大疆 API 返回的实时列表
         List<DjiProjectDto> djiProjects = djiService.getProjects(apiKey);
-
-        // 2. 获取数据库中该用户的已导入项目
         QueryWrapper<SysProject> query = new QueryWrapper<>();
         query.select("dji_project_uuid");
         query.eq("created_by", userId);
         List<SysProject> myExistingProjects = sysProjectMapper.selectList(query);
-
-        // 3. 构建 Set (去空格 + 转小写)
         Set<String> importedUuids = new HashSet<>();
         if (myExistingProjects != null) {
             for (SysProject p : myExistingProjects) {
@@ -92,8 +200,6 @@ public class ProjectController {
                 }
             }
         }
-
-        // 4. 比对状态
         if (djiProjects != null) {
             for (DjiProjectDto dto : djiProjects) {
                 if (dto.getUuid() != null) {
@@ -104,23 +210,17 @@ public class ProjectController {
                 }
             }
         }
-
         return ApiResponse.success("获取成功", djiProjects);
     }
 
-    /**
-     * 导入项目
-     */
     @PostMapping("/import")
     public ApiResponse<Object> importProject(@RequestBody ProjectImportRequest request, HttpServletRequest httpRequest) {
         Integer userId = (Integer) httpRequest.getAttribute("currentUser");
         if (userId == null) userId = 1;
-
         try {
             projectService.importProject(request, userId);
             return ApiResponse.success("导入成功");
         } catch (RuntimeException re) {
-            // 捕获业务逻辑报错（比如“项目已存在”）
             return ApiResponse.error(re.getMessage());
         } catch (Exception e) {
             e.printStackTrace();
@@ -128,9 +228,6 @@ public class ProjectController {
         }
     }
 
-    /**
-     * 获取我的项目列表
-     */
     @GetMapping("/my")
     public ApiResponse<List<SysProject>> getMyProjects(HttpServletRequest httpRequest) {
         Integer userId = (Integer) httpRequest.getAttribute("currentUser");
@@ -138,9 +235,6 @@ public class ProjectController {
         return ApiResponse.success("获取成功", projects);
     }
 
-    /**
-     * 更新项目围栏并触发进度计算
-     */
     @PostMapping("/{projectId}/boundary")
     public ApiResponse<Object> updateBoundary(@PathVariable Integer projectId, @RequestBody List<Coordinate> coords) {
         ((ProjectServiceImpl) projectService).updateBoundary(projectId, coords);
@@ -155,9 +249,6 @@ public class ProjectController {
         return ApiResponse.success("围栏设置成功，且进度已更新");
     }
 
-    /**
-     * 获取项目照片列表
-     */
     @GetMapping("/{id}/photos")
     public ApiResponse<List<ProjectPhoto>> getProjectPhotos(@PathVariable Integer id) {
         QueryWrapper<ProjectPhoto> query = new QueryWrapper<>();
@@ -168,9 +259,6 @@ public class ProjectController {
         return ApiResponse.success("获取成功", photos);
     }
 
-    /**
-     * 删除项目
-     */
     @DeleteMapping("/{id}")
     public ApiResponse<Object> deleteProject(@PathVariable Integer id) {
         try {
@@ -181,9 +269,6 @@ public class ProjectController {
         }
     }
 
-    /**
-     * 获取单个项目详情
-     */
     @GetMapping("/{id}")
     public ApiResponse<SysProject> getProjectDetail(@PathVariable Integer id) {
         SysProject project = sysProjectMapper.selectById(id);
@@ -193,10 +278,6 @@ public class ProjectController {
         return ApiResponse.success("获取成功", project);
     }
 
-
-    /**
-     * 更新项目信息
-     */
     @PutMapping("/{id}")
     public ApiResponse<Object> updateProject(@PathVariable Integer id, @RequestBody SysProject project) {
         project.setId(id);
@@ -205,7 +286,7 @@ public class ProjectController {
     }
 
     /**
-     * 手动触发同步接口
+     * 手动触发同步接口 (已修复日志记录功能)
      */
     @PostMapping("/{projectId}/sync")
     public ApiResponse<String> manualSyncPhotos(@PathVariable Integer projectId, @RequestBody Map<String, String> body) {
@@ -217,6 +298,11 @@ public class ProjectController {
                                 ? tempKeyword.trim()
                                 : project.getPhotoFolderKeyword();
 
+        // 1. [新增] 准备日志对象
+        SysTaskLog log = new SysTaskLog();
+        log.setProjectId(projectId);
+        log.setTaskType(SysTaskLog.TYPE_PHOTO_SYNC);
+
         try {
             List<DjiMediaFileDto> djiFiles = djiService.getPhotosFromFolder(
                 project.getDjiProjectUuid(),
@@ -225,11 +311,17 @@ public class ProjectController {
             );
 
             if (djiFiles.isEmpty()) {
+                // 2. [新增] 即使没找到文件，也记录一条"成功"日志，证明系统检查过了
+                log.setStatus(1);
+                log.setMessage("手动检查完毕，司空平台无新文件");
+                sysTaskLogMapper.insert(log);
+
                 return ApiResponse.success("同步完成，未找到包含关键词 [" + targetKeyword + "] 的新照片。");
             }
 
             int successCount = 0;
             for (DjiMediaFileDto djiFile : djiFiles) {
+                // --- 原有的过滤逻辑 (保持不变) ---
                 String fileName = djiFile.getFileName();
                 if ("Remote-Control".equals(fileName) || fileName.endsWith(".MRK") || fileName.endsWith(".NAV")
                         || fileName.endsWith(".OBS") || fileName.endsWith(".RTK") || fileName.endsWith("_D")) {
@@ -245,6 +337,7 @@ public class ProjectController {
 
                 if (projectPhotoMapper.selectCount(new QueryWrapper<ProjectPhoto>().eq("photo_url", objectKey)) > 0) continue;
 
+                // --- 原有的下载与解析逻辑 (保持不变) ---
                 try {
                     Request request = new Request.Builder().url(djiFile.getDownloadUrl()).get().build();
                     try (Response response = okHttpClient.newCall(request).execute()) {
@@ -289,15 +382,28 @@ public class ProjectController {
                 }
             }
 
+            // 3. [新增] 循环结束后，记录最终结果日志
+            log.setStatus(1);
             if (successCount > 0) {
                 progressService.calculateProjectProgress(projectId);
+                log.setMessage("手动同步完成，新增 " + successCount + " 张");
+                sysTaskLogMapper.insert(log);
+
                 return ApiResponse.success("同步成功，新增 " + successCount + " 张照片，进度已自动更新。");
             } else {
+                log.setMessage("手动检查完毕，云端文件均已同步");
+                sysTaskLogMapper.insert(log);
+
                 return ApiResponse.success("同步完成，找到 " + djiFiles.size() + " 张照片，但都是已存在的，无新增。");
             }
 
         } catch (Exception e) {
             e.printStackTrace();
+            // 4. [新增] 异常情况也记录日志
+            log.setStatus(0);
+            log.setMessage("手动同步异常: " + e.getMessage());
+            sysTaskLogMapper.insert(log);
+
             return ApiResponse.error("同步过程中发生错误: " + e.getMessage());
         }
     }

@@ -116,7 +116,12 @@ public class LoginController {
             newUser.setEmail(dto.getEmail());
             newUser.setPhone(dto.getPhone());
             newUser.setCreatedAt(LocalDateTime.now());
-            newUser.setRealName("新用户"); // 默认昵称
+            // 🔥 [核心修改] 优先使用用户输入的真实姓名，如果没填，则默认使用用户名
+            if (dto.getRealName() != null && !dto.getRealName().trim().isEmpty()) {
+                newUser.setRealName(dto.getRealName());
+            } else {
+                newUser.setRealName(dto.getUsername()); // 默认用账号名，比"新用户"更好识别
+            }
 
             sysUserMapper.insert(newUser);
             return ApiResponse.success("注册成功！请前往登录页面");

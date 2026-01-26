@@ -19,6 +19,11 @@ public class RegisterDto {
     private String password;
 
     /**
+     * 真实姓名 (新增)
+     */
+    private String realName;
+
+    /**
      * 手机号 (可选)
      */
     private String phone;

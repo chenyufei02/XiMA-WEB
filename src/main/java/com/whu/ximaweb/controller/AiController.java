@@ -14,7 +14,9 @@ import com.whu.ximaweb.service.EmailService;
 import com.whu.ximaweb.service.KimiAiService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
-
+import com.whu.ximaweb.mapper.SysTaskLogMapper;
+import com.whu.ximaweb.model.SysTaskLog;
+import java.util.Date;
 import javax.servlet.http.HttpServletRequest;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -42,6 +44,9 @@ public class AiController {
 
     @Autowired
     private PlanProgressMapper planProgressMapper;
+
+    @Autowired
+    private SysTaskLogMapper sysTaskLogMapper;
 
     /**
      * 手动触发 AI 分析
@@ -108,9 +113,30 @@ public class AiController {
 
         try {
             emailService.sendSimpleMail(user.getEmail(), subject, mailText);
+
+            // 🔥 [新增] 核心修改：发送成功后，往数据库写一条日志
+            SysTaskLog log = new SysTaskLog();
+            log.setProjectId(projectId);
+            log.setTaskType(SysTaskLog.TYPE_DAILY_REPORT);
+            log.setStatus(1);
+            // 记录接收人名字，让日志看起来更直观
+            log.setMessage("手动发送报告至: " + (user.getRealName() != null ? user.getRealName() : user.getUsername()));
+            log.setCreateTime(new Date()); // 显式设置时间
+            sysTaskLogMapper.insert(log);
+
             return ApiResponse.success("邮件已发送至 " + user.getEmail());
         } catch (Exception e) {
             e.printStackTrace();
+
+            // (可选) 失败也可以记录一条
+            SysTaskLog errorLog = new SysTaskLog();
+            errorLog.setProjectId(projectId);
+            errorLog.setTaskType(SysTaskLog.TYPE_DAILY_REPORT);
+            errorLog.setStatus(0);
+            errorLog.setMessage("邮件发送失败");
+            errorLog.setCreateTime(new Date());
+            sysTaskLogMapper.insert(errorLog);
+
             return ApiResponse.error("邮件发送失败，请检查服务器日志");
         }
     }
