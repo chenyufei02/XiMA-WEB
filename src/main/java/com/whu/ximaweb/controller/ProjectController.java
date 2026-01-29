@@ -72,6 +72,9 @@ public class ProjectController {
     @Autowired
     private PhotoProcessor photoProcessor;
 
+    @Autowired
+    private com.whu.ximaweb.service.EzvizService ezvizService; // 🔥 [新增]
+
     /**
      * [新增接口] 获取项目的自动化监控面板数据
      */
@@ -89,6 +92,27 @@ public class ProjectController {
         // 🔥 [修复2] 日志时间格式增加年月日
         SimpleDateFormat timeSdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         timeSdf.setTimeZone(TimeZone.getTimeZone("Asia/Shanghai"));
+
+        // 🔥 [新增] 注入萤石云播放地址
+        // 只有当 Token 存在且未过期时，才返回播放地址
+        if (project.getEzvizAccessToken() != null && project.getEzvizDeviceSerial() != null) {
+            // 简单判断过期 (为了演示稳健性)
+            if (project.getEzvizTokenExpireTime() != null && new Date().after(project.getEzvizTokenExpireTime())) {
+                // 如果过期了，这里应该触发刷新逻辑，但毕设演示暂不处理，或者手动点保存触发刷新
+                vo.setEzvizUrl("");
+            } else {
+                // 构造标准播放地址: ezopen://open.ys7.com/[验证码@][序列号]/[通道].live
+                String playUrl = "ezopen://open.ys7.com/";
+                if (project.getEzvizValidateCode() != null && !project.getEzvizValidateCode().isEmpty()) {
+                    playUrl += project.getEzvizValidateCode() + "@";
+                }
+                playUrl += project.getEzvizDeviceSerial() + "/1.live";
+
+                vo.setEzvizUrl(playUrl);
+                vo.setEzvizToken(project.getEzvizAccessToken());
+            }
+        }
+
 
         // 1. --- 左侧：司空2同步监控 ---
         Long totalPhotos = projectPhotoMapper.selectCount(new QueryWrapper<ProjectPhoto>().eq("project_id", id));
@@ -406,5 +430,52 @@ public class ProjectController {
 
             return ApiResponse.error("同步过程中发生错误: " + e.getMessage());
         }
+    }
+
+    /**
+     * [新增接口] 保存萤石云摄像头配置，并尝试自动获取 Token
+     */
+    @PostMapping("/{projectId}/camera-config")
+    public ApiResponse<Object> saveCameraConfig(@PathVariable Integer projectId, @RequestBody Map<String, String> body) {
+        SysProject project = sysProjectMapper.selectById(projectId);
+        if (project == null) return ApiResponse.error("项目不存在");
+
+        String appKey = body.get("appKey");
+        String secret = body.get("secret");
+        String serial = body.get("serial");
+        String code = body.get("validateCode"); // 验证码
+
+        // 1. 更新基础配置
+        project.setEzvizAppKey(appKey);
+        project.setEzvizAppSecret(secret);
+        project.setEzvizDeviceSerial(serial);
+        project.setEzvizValidateCode(code);
+
+        // 2. 如果填了 Key 和 Secret，尝试去萤石云拿 Token (实战核心！)
+        if (appKey != null && !appKey.isEmpty() && secret != null && !secret.isEmpty()) {
+            try {
+                System.out.println(">>> 正在向萤石云申请 Token...");
+                String token = ezvizService.getAccessToken(appKey, secret);
+
+                // 获取成功，保存 Token 和过期时间 (简单起见，设为7天后过期)
+                project.setEzvizAccessToken(token);
+
+                Calendar cal = Calendar.getInstance();
+                cal.add(Calendar.DAY_OF_YEAR, 7); // 萤石云Token有效期默认7天
+                project.setEzvizTokenExpireTime(cal.getTime());
+
+                System.out.println(">>> 萤石云 Token 获取成功: " + token);
+            } catch (Exception e) {
+                e.printStackTrace();
+                // 注意：这里我们捕获异常但不阻断保存，只是提示用户
+                // 但为了严谨，我们可以先把配置存进去，前端提示警告
+                sysProjectMapper.updateById(project);
+                return ApiResponse.error("配置保存成功，但连接萤石云失败: " + e.getMessage());
+            }
+        }
+
+        // 3. 保存入库
+        sysProjectMapper.updateById(project);
+        return ApiResponse.success("摄像头配置已保存，且连接测试通过！");
     }
 }

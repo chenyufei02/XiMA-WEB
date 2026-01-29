@@ -1,6 +1,10 @@
 package com.whu.ximaweb.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.obs.services.ObsClient;
+import com.obs.services.model.HttpMethodEnum;
+import com.obs.services.model.TemporarySignatureRequest;
+import com.obs.services.model.TemporarySignatureResponse;
 import com.whu.ximaweb.dto.ApiResponse;
 import com.whu.ximaweb.dto.DashboardVo;
 import com.whu.ximaweb.mapper.*;
@@ -9,14 +13,21 @@ import com.whu.ximaweb.service.ProgressService;
 import com.whu.ximaweb.service.impl.ProgressServiceImpl;
 import lombok.Data;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
-
+import com.whu.ximaweb.dto.BuildingHistoryVo;
+import com.whu.ximaweb.mapper.ProjectPhotoMapper;
+import com.whu.ximaweb.model.ProjectPhoto;
+import java.time.format.DateTimeFormatter;
+import javax.annotation.PostConstruct; // 用于初始化
+import javax.annotation.PreDestroy;    // 用于销毁
 /**
  * 进度管理控制器 (最终完整版)
  * 负责：触发计算、获取原始图表数据、获取看板聚合数据
@@ -40,6 +51,54 @@ public class ProgressController {
     private SysBuildingMapper sysBuildingMapper;
     @Autowired
     private PlanProgressMapper planProgressMapper;
+    @Autowired
+    private ProjectPhotoMapper projectPhotoMapper; // 👈 必须注入它，否则无法查照片
+
+
+    // --- OBS 配置注入 ---
+    @Value("${xima.obs.default-endpoint}")
+    private String obsEndpoint;
+
+    @Value("${xima.obs.default-bucket}")
+    private String obsBucket;
+
+    // 使用配置文件里已有的 default-ak
+    @Value("${xima.obs.default-ak}")
+    private String obsAccessKey;
+
+    // 🔥使用配置文件里已有的 default-sk
+    @Value("${xima.obs.default-sk}")
+    private String obsSecretKey;
+
+    // OBS 客户端实例
+    private ObsClient obsClient;
+
+
+    /**
+     * 初始化 ObsClient (在服务启动时执行一次)
+     */
+    @PostConstruct
+    public void initObsClient() {
+        this.obsClient = new ObsClient(obsAccessKey, obsSecretKey, obsEndpoint);
+    }
+
+    /**
+     * 销毁 ObsClient (在服务关闭时执行)
+     */
+    @PreDestroy
+    public void closeObsClient() {
+        if (this.obsClient != null) {
+            try {
+                this.obsClient.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+
+
+
 
     /**
      * 👉 1. 手动触发计算接口 (保留原功能)
@@ -319,6 +378,100 @@ public class ProgressController {
             return Integer.parseInt(str.replaceAll("[^0-9]", ""));
         } catch (Exception e) { return 0; }
     }
+
+    /**
+     * [新增接口] 获取某栋楼的完整生长历史 (已修复日期类型报错)
+     */
+    @GetMapping("/building/{buildingId}/history")
+    public ApiResponse<List<BuildingHistoryVo>> getBuildingHistory(@PathVariable Integer buildingId) {
+        // 1. 查询实测记录
+        QueryWrapper<ActualProgress> progressQuery = new QueryWrapper<>();
+        progressQuery.eq("building_id", buildingId);
+        progressQuery.orderByAsc("measurement_date");
+        List<ActualProgress> progressList = actualProgressMapper.selectList(progressQuery);
+
+        if (progressList == null || progressList.isEmpty()) {
+            return ApiResponse.success("暂无历史数据", new ArrayList<>());
+        }
+
+        // 🔥 [修复] 使用 DateTimeFormatter 处理 LocalDate
+        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+
+        List<BuildingHistoryVo> historyList = new ArrayList<>();
+
+        for (ActualProgress progress : progressList) {
+            BuildingHistoryVo vo = new BuildingHistoryVo();
+
+            // 🔥 [修复] LocalDate 转 String
+            String dateStr = "";
+            if (progress.getMeasurementDate() != null) {
+                dateStr = progress.getMeasurementDate().format(dtf);
+            }
+            vo.setDate(dateStr);
+
+            vo.setFloor(progress.getFloorLevel());
+            vo.setHeight(progress.getActualHeight() != null ? progress.getActualHeight().doubleValue() : 0.0);
+
+            // 2. 查照片
+            QueryWrapper<ProjectPhoto> photoQuery = new QueryWrapper<>();
+            photoQuery.select("photo_url"); // 只查 URL 字段，轻量化
+            photoQuery.eq("project_id", progress.getProjectId());
+
+            // 匹配日期 (假设数据库里 shoot_time 是 datetime 类型)
+            // SQL: DATE_FORMAT(shoot_time, '%Y-%m-%d') = '2026-01-26'
+            if (!dateStr.isEmpty()) {
+                photoQuery.apply("DATE_FORMAT(shoot_time, '%Y-%m-%d') = {0}", dateStr);
+            }
+
+            photoQuery.last("LIMIT 1"); // 只要一张
+
+            ProjectPhoto photo = projectPhotoMapper.selectOne(photoQuery);
+
+            if (photo != null) {
+                String objectKey = photo.getPhotoUrl();
+
+                if (objectKey != null && !objectKey.isEmpty()) {
+                    // 1. 清理 ObjectKey：OBS 不喜欢以 "/" 开头的路径
+                    // 如果数据库存的是 "/projects/..."，要去掉第一个斜杠变成 "projects/..."
+                    if (objectKey.startsWith("/")) {
+                        objectKey = objectKey.substring(1);
+                    }
+
+                    // 2. 生成临时签名 URL (有效期 3600秒 = 1小时)
+                    try {
+                        TemporarySignatureRequest request = new TemporarySignatureRequest(
+                                HttpMethodEnum.GET,
+                                3600L
+                        );
+                        request.setBucketName(obsBucket);
+                        request.setObjectKey(objectKey);
+
+                        // 生成带签名的响应
+                        TemporarySignatureResponse response = obsClient.createTemporarySignature(request);
+
+                        // 3. 拿到那个带一长串 Token 的安全链接
+                        vo.setPhotoUrl(response.getSignedUrl());
+
+                    } catch (Exception e) {
+                        // 万一签名失败，降级为空，防止接口崩了
+                        e.printStackTrace();
+                        vo.setPhotoUrl("");
+                    }
+                }
+            } else {
+                vo.setPhotoUrl("");
+            }
+
+            historyList.add(vo);
+        }
+
+        return ApiResponse.success("获取生长历史成功", historyList);
+    }
+
+
+
+
+
 
     // --- DTO 内部类 ---
     @Data

@@ -6,6 +6,8 @@
     <title>项目指挥中心 - XiMA 智造</title>
     <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <script src="https://open.ys7.com/sdk/js/1.5/ezuikit.js"></script>
     <style>
         /* --- 1. 全局变量与基础样式 --- */
         :root {
@@ -171,6 +173,27 @@
         }
         .monitor-title { font-size: 16px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 10px; }
         .monitor-body { display: flex; padding: 25px; gap: 30px; }
+
+        /* 🔥 [新增] 视频监控栏样式 */
+        .monitor-video-row {
+            margin: 0 25px 25px 25px; /* 左右下留白 */
+            background: #000;         /* 黑色背景，显专业 */
+            border-radius: 8px;
+            overflow: hidden;
+            position: relative;
+            min-height: 300px;        /* 视频高度 */
+            border: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        /* 视频标题角标 */
+        .video-label {
+            position: absolute; top: 10px; left: 10px; z-index: 10;
+            background: rgba(0,0,0,0.6); color: #fff; padding: 4px 8px;
+            font-size: 12px; border-radius: 4px; display: flex; align-items: center; gap: 6px;
+        }
+        .video-label .dot { width: 8px; height: 8px; background: #ea5455; border-radius: 50%; animation: pulse 1s infinite; }
 
         .monitor-panel {
             flex: 1; background: rgba(40, 40, 60, 0.4); border-radius: 12px;
@@ -470,10 +493,75 @@
             white-space: pre-wrap; /* 保留换行 */
         }
 
+        /* 🔥 [新增] 视频配置按钮样式 */
+        .video-settings {
+            position: absolute; top: 10px; right: 10px; z-index: 10;
+            background: rgba(0,0,0,0.6); color: #ccc; padding: 4px 10px;
+            font-size: 12px; border-radius: 4px; cursor: pointer;
+            border: 1px solid rgba(255,255,255,0.1); transition: all 0.3s;
+        }
+        .video-settings:hover { background: var(--accent-purple); color: #fff; border-color: var(--accent-purple); }
+
+
+        /* 🔥 [新增] 时光机回溯框样式 */
+        .time-machine-box {
+            height: 300px; /* 固定高度 */
+            background: #000;
+            position: relative;
+            border-top: 1px solid var(--border-color);
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* 图片自适应，保证不拉伸 */
+        .tm-image {
+            width: 100%;
+            height: 100%;
+            object-fit: contain; /* 保持比例，可能有黑边 */
+            /* 或者用 cover 填满，但可能会裁切掉楼顶 */
+            transition: opacity 0.2s;
+        }
+
+        /* 播放按钮遮罩 */
+        .tm-play-mask {
+            position: absolute; top:0; left:0; right:0; bottom:0;
+            background: rgba(0,0,0,0.3);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            z-index: 20;
+            transition: all 0.3s;
+        }
+        .tm-play-mask:hover { background: rgba(0,0,0,0.1); }
+        .tm-play-btn {
+            font-size: 60px; color: rgba(255,255,255,0.8);
+            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5));
+        }
+
+        /* 顶部信息条 (半透明悬浮) */
+        .tm-info-bar {
+            position: absolute; top: 15px; left: 15px; z-index: 10;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            padding: 8px 15px;
+            border-radius: 6px;
+            border-left: 3px solid var(--accent-blue);
+            color: #fff;
+            font-family: 'Consolas', monospace;
+            display: flex; gap: 15px;
+            font-size: 14px;
+        }
+        .tm-info-item i { color: var(--text-secondary); margin-right: 5px; }
+        .tm-tag {
+            background: var(--accent-purple); padding: 2px 6px;
+            border-radius: 4px; font-size: 12px; font-weight: bold;
+        }
+
     </style>
 </head>
-<body>
 
+<body>
 <div id="app">
     <div class="sidebar">
         <div class="project-title-area" :title="dashboardData.projectName">
@@ -620,6 +708,19 @@
                         </div>
                     </div>
 
+                    <div class="monitor-video-row" id="video-container">
+                        <div class="video-label"><div class="dot"></div> 现场 LIVE | 1号机位</div>
+                        <div class="video-settings" @click="openCameraConfig" title="配置摄像头">
+                            <i class="el-icon-setting"></i> 配置信号源
+                        </div>
+                        <div id="ezviz-player" style="width: 100%; height: 100%;"></div>
+
+                        <div v-if="!cameraConfigured" style="color: #666; text-align: center;">
+                            <i class="el-icon-video-camera" style="font-size: 40px; margin-bottom: 10px;"></i>
+                            <p>等待接入视频信号...</p>
+                        </div>
+                    </div>
+
                     <div class="log-terminal">
                         <div v-if="!monitorData.logs || monitorData.logs.length === 0" style="padding:10px;">暂无日志...</div>
                         <div v-for="(log, i) in monitorData.logs" :key="i" class="log-line">
@@ -704,6 +805,29 @@
                                 <div :id="'chart-diff-' + index" class="chart-container"></div>
                             </div>
                         </div>
+
+                        <div class="time-machine-box">
+                            <img :src="getTmImage(b)" class="tm-image" alt="暂无照片">
+
+                            <div class="tm-info-bar" v-if="b.history && b.history.length > 0">
+                                <span class="tm-info-item"><i class="el-icon-date"></i> {{ getTmCurrent(b).date }}</span>
+                                <span class="tm-info-item"><i class="el-icon-office-building"></i> {{ getTmCurrent(b).floor }}层</span>
+                                <span class="tm-info-item"><i class="el-icon-s-data"></i> {{ getTmCurrent(b).height }}m</span>
+                                <span v-if="b.isPlaying" class="tm-tag">▶️ 回溯中...</span>
+                            </div>
+
+                            <div class="tm-play-mask" v-if="!b.isPlaying" @click="togglePlay(b)">
+                                <i class="el-icon-video-play tm-play-btn"></i>
+                                <div style="position:absolute; bottom:20px; color:#fff; font-size:14px; opacity:0.8;">
+                                    {{ b.historyLoaded ? '点击继续回溯' : '点击开始生长回溯' }}
+                                </div>
+                            </div>
+
+                            <div v-if="b.isPlaying"
+                                 style="position:absolute; bottom:15px; right:15px; cursor:pointer; z-index:30; background:rgba(0,0,0,0.5); padding:5px 10px; border-radius:4px; color:#fff;"
+                                 @click="togglePlay(b)">
+                                <i class="el-icon-video-pause"></i> 暂停
+                            </div>
                     </div>
 
                     <div v-if="dashboardData.buildings.length === 0" class="empty-state">
@@ -714,6 +838,29 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <el-dialog title="配置萤石云摄像头" :visible.sync="showCameraDialog" width="500px" append-to-body>
+        <el-form :model="cameraForm" label-width="100px" size="small">
+            <el-alert title="请填写萤石云开放平台 (open.ys7.com) 的设备信息" type="info" :closable="false" style="margin-bottom:20px;"></el-alert>
+            <el-form-item label="AppKey" required>
+                <el-input v-model="cameraForm.appKey" placeholder="例如: 4c90xxxx"></el-input>
+            </el-form-item>
+            <el-form-item label="Secret" required>
+                <el-input v-model="cameraForm.secret" type="password" placeholder="例如: 8835xxxx"></el-input>
+            </el-form-item>
+            <el-form-item label="设备序列号" required>
+                <el-input v-model="cameraForm.serial" placeholder="例如: D12345678"></el-input>
+            </el-form-item>
+            <el-form-item label="设备验证码" required>
+                <el-input v-model="cameraForm.validateCode" placeholder="机身标签上的6位大写字母"></el-input>
+            </el-form-item>
+        </el-form>
+        <span slot="footer">
+            <el-button @click="showCameraDialog = false">取消</el-button>
+            <el-button type="primary" :loading="savingCamera" @click="saveCameraConfig">保存并连接</el-button>
+        </span>
+    </el-dialog>
     </div>
 </div>
 
@@ -729,31 +876,72 @@
             loading: true,
             syncing: false,
             calculating: false,
+
+            // 1. 基础看板数据 (保持不动)
             dashboardData: {
                 projectName: '',
                 safeRunDays: 0,
                 delayedCount: 0,
                 normalCount: 0,
-                buildings: [],
-                // 🔥 [新增] 监控数据
-                monitorData: {
-                    djiConnected: false, totalPhotos: 0, lastSyncTime: '--', nextSyncTime: '--',
-                    reportEnabled: false, runDays: 0, totalReports: 0, lastReportTime: '--', nextReportTime: '--', receiverName: '--',
-                    logs: []
-                },
-                monitorTimer: null,
+                lastUpdateDate: '', // 补全这个字段，防止 formatLastUpdate 报错
+                buildings: []
             },
+
+            // =========================================================
+            // 🔥 [核心修复] 下面这些变量必须放在最外层，不能放在 dashboardData 里面！
+            // =========================================================
+
+            // 2. 监控面板数据
+            monitorData: {
+                djiConnected: false,
+                totalPhotos: 0,
+                lastSyncTime: '--',
+                nextSyncTime: '--',
+                reportEnabled: false,
+                runDays: 0,
+                totalReports: 0,
+                lastReportTime: '--',
+                nextReportTime: '--',
+                receiverName: '--',
+                logs: [],
+                // 确保这里有 URL 和 Token 字段，防止读取报错
+                ezvizUrl: '',
+                ezvizToken: ''
+            },
+
+            // 定时器
+            monitorTimer: null,
+
+            // 3. 摄像头播放器状态
+            cameraConfigured: false,
+            ezvizPlayer: null,
+
+            // 4. 摄像头配置弹窗相关 (之前报错缺少的变量都在这里)
+            showCameraDialog: false,
+            savingCamera: false,
+            cameraForm: {
+                appKey: '',
+                secret: '',
+                serial: '',
+                validateCode: ''
+            },
+
+            // =========================================================
+            // 🔥 AI 和 拖拽相关变量 (保持在最外层)
+            // =========================================================
+
             showAiDialog: false, // 控制弹窗显示
             aiLoading: false,    // 控制AI思考中的加载状态
             aiResult: '',        // 存储AI分析的文字结果
-            sendingMail: false ,  // 控制邮件发送中的状态
-            // === 新增拖拽相关变量 ===
+            sendingMail: false,  // 控制邮件发送中的状态
+
+            // 拖拽相关变量
             ballLeft: document.documentElement.clientWidth - 80, // 初始靠右
             ballTop: document.documentElement.clientHeight / 2 - 30, // 初始居中
             isDragging: false,
             hasDragged: false, // 判断是点击还是拖拽
             dragStartX: 0,
-            dragStartY: 0,
+            dragStartY: 0
         },
         mounted() {
             // 尝试读取上次的项目ID，如果URL中没有参数，则使用缓存
@@ -762,12 +950,92 @@
             this.fetchData();
             // 🔥 [新增] 启动监控数据刷新
             this.fetchMonitorData();
+            // 🔥 [插入] 初始化视频播放器
+            this.initPlayer();
             this.monitorTimer = setInterval(this.fetchMonitorData, 30000);
         },
         beforeDestroy() {
             if (this.monitorTimer) clearInterval(this.monitorTimer);
         },
         methods: {
+            // --- 时光机逻辑开始 ---
+
+            // 1. 获取当前应该显示的图片
+            getTmImage(b) {
+                // 如果正在播放，且有数据，显示当前帧
+                if (b.history && b.history.length > 0) {
+                    const currentItem = b.history[b.playIndex];
+                    // 如果那天有照片，显示照片；没照片，显示一张默认图或者空
+                    return currentItem.photoUrl || 'https://via.placeholder.com/800x600/000000/FFFFFF?text=No+Photo';
+                }
+                // 如果没开始播放，默认显示该楼栋"最新一次实测"那一天的照片(如果有)，或者空
+                // 这里简单处理：如果没有历史数据，就显示个黑色背景图
+                return 'https://via.placeholder.com/800x600/1e1e2d/aaaaaa?text=Building+Timelapse';
+            },
+
+            // 2. 获取当前帧的信息
+            getTmCurrent(b) {
+                if (b.history && b.history[b.playIndex]) {
+                    return b.history[b.playIndex];
+                }
+                return { date: '--', floor: 0, height: 0 };
+            },
+
+            // 3. 开关播放 (核心懒加载逻辑)
+            togglePlay(building) {
+                if (building.isPlaying) {
+                    // 停止播放
+                    clearInterval(building.playTimer);
+                    building.isPlaying = false;
+                } else {
+                    // 开始播放
+                    // 如果数据还没加载，先去后端请求 (懒加载！)
+                    if (!building.historyLoaded) {
+                        const token = localStorage.getItem('token');
+                        this.$message.info("正在加载生长历史数据...");
+
+                        axios.get(`/api/progress/building/${building.buildingId}/history`, {
+                            headers: { 'Authorization': token ? 'Bearer ' + token : '' }
+                        }).then(res => {
+                            if ((res.data.code || res.data.status) === 200) {
+                                building.history = res.data.data;
+                                building.historyLoaded = true;
+
+                                if (building.history.length === 0) {
+                                    this.$message.warning("该楼栋暂无历史数据");
+                                    return;
+                                }
+                                // 数据回来后，开始播放
+                                this.startPlayback(building);
+                            }
+                        });
+                    } else {
+                        // 数据已有，直接继续播放
+                        this.startPlayback(building);
+                    }
+                }
+            },
+
+            // 4. 执行播放循环
+            startPlayback(building) {
+                building.isPlaying = true;
+
+                // 如果已经播完了，重头开始
+                if (building.playIndex >= building.history.length - 1) {
+                    building.playIndex = 0;
+                }
+
+                building.playTimer = setInterval(() => {
+                    building.playIndex++;
+                    // 播到最后一张，自动停止，或者循环播放？这里设为循环
+                    if (building.playIndex >= building.history.length) {
+                        building.playIndex = 0; // 循环播放
+                        // clearInterval(building.playTimer); building.isPlaying = false; // 如果想播完停止用这行
+                    }
+                }, 500); // 🔥 500毫秒切换一张，速度可调
+            },
+            // --- 时光机逻辑结束 ---
+
             // 返回首页
             goHome() {
                 localStorage.removeItem('fromDashboard'); // 清除标记
@@ -856,6 +1124,14 @@
                 }).then(res => {
                     if((res.data.code || res.data.status) === 200) {
                         this.dashboardData = res.data.data;
+                        // 🔥 [新增] 为每栋楼初始化“时光机”所需的响应式属性
+                        this.dashboardData.buildings.forEach(b => {
+                            this.$set(b, 'isPlaying', false);      // 是否正在播放
+                            this.$set(b, 'historyLoaded', false);  // 历史数据是否已加载
+                            this.$set(b, 'history', []);           // 历史数据列表
+                            this.$set(b, 'playIndex', 0);          // 当前播放到第几张
+                            this.$set(b, 'playTimer', null);       // 定时器ID
+                        });
                         this.loading = false;
 
                         // [新增] 成功获取数据后，更新缓存中的项目ID，双重保险
@@ -875,6 +1151,7 @@
                     this.loading = false;
                 });
             },
+
             // 🔥 [新增] 获取监控面板数据接口
             fetchMonitorData() {
                 const token = localStorage.getItem('token');
@@ -882,8 +1159,49 @@
                 .then(res => {
                     if((res.data.code || res.data.status) === 200) {
                         this.monitorData = res.data.data;
+                        // 🔥 [新增] 数据回来后，尝试初始化播放器
+                        // (如果已经初始化过，initPlayer 内部会拦截，不会重复创建)
+                        this.initPlayer();
                     }
                 }).catch(console.error);
+            },
+
+            // 🔥 [更新] 初始化播放器 (改为读取 monitorData)
+            initPlayer() {
+
+                // 🔴 [新增保护] 如果 monitorData 还没加载好，或者是空的，直接不执行
+                if (!this.monitorData) return;
+
+                // 1. 从后端返回的数据中获取 URL 和 Token
+                const ezvizUrl = this.monitorData.ezvizUrl;
+                const ezvizToken = this.monitorData.ezvizToken;
+
+                // 2. 如果没有 URL，说明未配置或后端获取 Token 失败
+                if (!ezvizUrl || !ezvizToken) {
+                    this.cameraConfigured = false;
+                    return; // 退出，等待下次数据刷新
+                }
+
+                // 3. 有数据了，标记为已配置
+                this.cameraConfigured = true;
+
+                this.$nextTick(() => {
+                    // 如果播放器已经存在，就不重复创建了 (或者你可以销毁重建，视情况而定)
+                    if (this.ezvizPlayer) return;
+
+                    if (typeof EZUIKit !== 'undefined') {
+                        console.log("启动播放器:", ezvizUrl);
+                        this.ezvizPlayer = new EZUIKit.EZUIKitPlayer({
+                            id: 'ezviz-player',
+                            autoplay: true,
+                            url: ezvizUrl,
+                            accessToken: ezvizToken,
+                            decoderPath: 'https://open.ys7.com/sdk/js/1.5/',
+                            width: '100%',
+                            height: 300,
+                        });
+                    }
+                });
             },
 
             // ECharts 渲染逻辑
@@ -1029,6 +1347,7 @@
                 })
                 .finally(() => this.sendingMail = false);
             },
+
             // === 2. 悬浮球拖拽逻辑 ===
             startDrag(e) {
                 this.isDragging = true;
@@ -1040,25 +1359,62 @@
                 document.addEventListener('mousemove', this.onDrag);
                 document.addEventListener('mouseup', this.stopDrag);
             },
+
             onDrag(e) {
                 if (!this.isDragging) return;
                 this.hasDragged = true;
                 this.ballLeft = e.clientX - this.dragStartX;
                 this.ballTop = e.clientY - this.dragStartY;
             },
+
             stopDrag() {
                 this.isDragging = false;
                 document.removeEventListener('mousemove', this.onDrag);
                 document.removeEventListener('mouseup', this.stopDrag);
             },
+
             handleBallClick() {
                 // 如果只是点击（没有发生拖拽），才打开弹窗
                 if (!this.hasDragged) {
                     this.showAiDialog = true;
                 }
-            }
+            },
+
+            // 🔥 [新增] 打开配置弹窗
+            openCameraConfig() {
+                this.showCameraDialog = true;
+                // 这里可以不用回显 AppKey/Secret (为了安全)，或者你可以单独加接口回显
+                // 简单起见，每次让用户重新输入，或者保留前端缓存
+            },
+
+            // 🔥 [新增] 保存配置
+            saveCameraConfig() {
+                if(!this.cameraForm.appKey || !this.cameraForm.serial) {
+                    this.$message.warning("请填写完整信息");
+                    return;
+                }
+                this.savingCamera = true;
+                const token = localStorage.getItem('token');
+
+                axios.post(`/api/projects/${this.projectId}/camera-config`, this.cameraForm, {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                }).then(res => {
+                    if((res.data.code || res.data.status) === 200) {
+                        this.$message.success("配置保存成功，正在尝试连接...");
+                        this.showCameraDialog = false;
+                        // 保存成功后，立即刷新数据，获取最新的播放地址
+                        this.fetchMonitorData();
+                    } else {
+                        this.$message.error(res.data.message);
+                    }
+                }).finally(() => this.savingCamera = false);
+            },
+
+
+
         }
     })
 </script>
+
 </body>
 </html>

@@ -23,6 +23,10 @@ public class MonitorVo {
     // === 底部：日志流 ===
     private List<LogItem> logs;       // 滚动日志列表
 
+    // 在 MonitorVo.java 里添加：
+    private String ezvizUrl;    // 播放地址
+    private String ezvizToken;  // 访问令牌
+
     @Data
     public static class LogItem {
         private String time;          // "10:00:01"
