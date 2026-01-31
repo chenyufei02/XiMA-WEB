@@ -425,6 +425,28 @@
             <el-form-item label="备注信息">
                 <el-input type="textarea" v-model="editForm.remarks" placeholder="（示例字段）"></el-input>
             </el-form-item>
+            <el-divider content-position="left">📷 萤石云视频配置</el-divider>
+
+            <el-form-item label="AppKey">
+                <el-input v-model="editForm.ezvizAppKey" placeholder="萤石云开发者 AppKey"></el-input>
+            </el-form-item>
+
+            <el-form-item label="AppSecret">
+                <el-input v-model="editForm.ezvizAppSecret" type="password" show-password placeholder="萤石云开发者 Secret"></el-input>
+            </el-form-item>
+
+            <el-form-item label="设备序列号">
+                <el-input v-model="editForm.ezvizDeviceSerial" placeholder="例如：GG9175016"></el-input>
+            </el-form-item>
+
+            <el-form-item label="验证码">
+                <el-input v-model="editForm.ezvizValidateCode" placeholder="未加密设备请留空！加密设备请填6位大写字母"></el-input>
+                <div style="font-size: 12px; color: #e6a23c; line-height: 1.2; margin-top: 5px;">
+                    <i class="el-icon-warning"></i> 注意：如果设备未开启视频加密，<b>此处必须留空</b>，否则会导致黑屏！
+                </div>
+            </el-form-item>
+
+
         </el-form>
         <span slot="footer" class="dialog-footer">
             <el-button @click="editDialogVisible = false" size="small">取 消</el-button>
@@ -531,7 +553,12 @@
                     projectName: item.projectName,
                     photoFolderKeyword: item.photoFolderKeyword,
                     manager: '',
-                    remarks: ''
+                    remarks: '',
+                    // 🔥 新增：回显萤石云配置
+                    ezvizAppKey: item.ezvizAppKey || '',
+                    ezvizAppSecret: item.ezvizAppSecret || '',
+                    ezvizDeviceSerial: item.ezvizDeviceSerial || '',
+                    ezvizValidateCode: item.ezvizValidateCode || ''
                 };
                 this.editDialogVisible = true;
             },

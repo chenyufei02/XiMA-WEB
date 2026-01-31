@@ -26,6 +26,8 @@ public class MonitorVo {
     // 在 MonitorVo.java 里添加：
     private String ezvizUrl;    // 播放地址
     private String ezvizToken;  // 访问令牌
+    private String serial;
+    private String validateCode;
 
     @Data
     public static class LogItem {

@@ -16,6 +16,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+import com.fasterxml.jackson.databind.ObjectMapper; // 👈 选这个！不要选 shade 开头的
+import com.fasterxml.jackson.core.type.TypeReference; // 👈 这个也不能少
+import com.whu.ximaweb.dto.Coordinate; // 确保这个也在
 
 import java.io.IOException;
 import java.time.LocalDate;
@@ -28,6 +31,8 @@ import com.whu.ximaweb.model.ProjectPhoto;
 import java.time.format.DateTimeFormatter;
 import javax.annotation.PostConstruct; // 用于初始化
 import javax.annotation.PreDestroy;    // 用于销毁
+
+
 /**
  * 进度管理控制器 (最终完整版)
  * 负责：触发计算、获取原始图表数据、获取看板聚合数据
@@ -380,11 +385,28 @@ public class ProgressController {
     }
 
     /**
-     * [新增接口] 获取某栋楼的完整生长历史 (已修复日期类型报错)
+     * [重写版] 获取某栋楼的完整生长历史 (基于电子围栏 + 缓冲区匹配)
+     * 解决了数据库没有 building_id 字段的问题
      */
     @GetMapping("/building/{buildingId}/history")
     public ApiResponse<List<BuildingHistoryVo>> getBuildingHistory(@PathVariable Integer buildingId) {
-        // 1. 查询实测记录
+        // 1. 获取楼栋信息和电子围栏
+        SysBuilding building = sysBuildingMapper.selectById(buildingId);
+        if (building == null) return ApiResponse.error("楼栋不存在");
+
+        List<Coordinate> fence = null;
+        try {
+            // 解析围栏 JSON
+            ObjectMapper mapper = new ObjectMapper();
+            String boundaryJson = building.getBoundaryCoords();
+            if (boundaryJson != null && !boundaryJson.isEmpty()) {
+                fence = mapper.readValue(boundaryJson, new TypeReference<List<Coordinate>>() {});
+            }
+        } catch (Exception e) {
+            e.printStackTrace(); // 围栏解析失败，但这不影响查数据，只是没法配照片
+        }
+
+        // 2. 查询该楼栋的实测进度记录 (作为时间轴)
         QueryWrapper<ActualProgress> progressQuery = new QueryWrapper<>();
         progressQuery.eq("building_id", buildingId);
         progressQuery.orderByAsc("measurement_date");
@@ -394,72 +416,79 @@ public class ProgressController {
             return ApiResponse.success("暂无历史数据", new ArrayList<>());
         }
 
-        // 🔥 [修复] 使用 DateTimeFormatter 处理 LocalDate
         DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-
         List<BuildingHistoryVo> historyList = new ArrayList<>();
 
+        // 3. 遍历每一天的进度，去匹配当天的照片
         for (ActualProgress progress : progressList) {
             BuildingHistoryVo vo = new BuildingHistoryVo();
 
-            // 🔥 [修复] LocalDate 转 String
+            // 3.1 填充基础数据
             String dateStr = "";
             if (progress.getMeasurementDate() != null) {
                 dateStr = progress.getMeasurementDate().format(dtf);
             }
             vo.setDate(dateStr);
-
             vo.setFloor(progress.getFloorLevel());
             vo.setHeight(progress.getActualHeight() != null ? progress.getActualHeight().doubleValue() : 0.0);
 
-            // 2. 查照片
-            QueryWrapper<ProjectPhoto> photoQuery = new QueryWrapper<>();
-            photoQuery.select("photo_url"); // 只查 URL 字段，轻量化
-            photoQuery.eq("project_id", progress.getProjectId());
+            // 3.2 寻找匹配的照片 (核心逻辑！)
+            String matchedUrl = "";
 
-            // 匹配日期 (假设数据库里 shoot_time 是 datetime 类型)
-            // SQL: DATE_FORMAT(shoot_time, '%Y-%m-%d') = '2026-01-26'
-            if (!dateStr.isEmpty()) {
+            // 如果有围栏数据，且日期有效，就开始找照片
+            if (fence != null && fence.size() >= 3 && !dateStr.isEmpty()) {
+
+                // A. 查出【整个项目】在【这一天】的所有照片
+                QueryWrapper<ProjectPhoto> photoQuery = new QueryWrapper<>();
+                photoQuery.select("photo_url", "gps_lat", "gps_lng", "lrf_target_lat", "lrf_target_lng");
+                photoQuery.eq("project_id", progress.getProjectId());
+                // 精确匹配日期
                 photoQuery.apply("DATE_FORMAT(shoot_time, '%Y-%m-%d') = {0}", dateStr);
-            }
+                // 限制条数，防止单日照片过多炸内存 (取前100张匹配即可)
+                photoQuery.last("LIMIT 100");
 
-            photoQuery.last("LIMIT 1"); // 只要一张
+                List<ProjectPhoto> dailyPhotos = projectPhotoMapper.selectList(photoQuery);
 
-            ProjectPhoto photo = projectPhotoMapper.selectOne(photoQuery);
+                // B. 遍历照片，判断哪一张在当前楼栋的围栏里
+                for (ProjectPhoto p : dailyPhotos) {
+                    // 优先取激光打点坐标，没有则取无人机GPS坐标
+                    double lat = (p.getLrfTargetLat() != null) ? p.getLrfTargetLat().doubleValue() : (p.getGpsLat() != null ? p.getGpsLat().doubleValue() : 0.0);
+                    double lng = (p.getLrfTargetLng() != null) ? p.getLrfTargetLng().doubleValue() : (p.getGpsLng() != null ? p.getGpsLng().doubleValue() : 0.0);
 
-            if (photo != null) {
-                String objectKey = photo.getPhotoUrl();
+                    // 坐标无效跳过
+                    if (lat == 0.0 || lng == 0.0) continue;
 
-                if (objectKey != null && !objectKey.isEmpty()) {
-                    // 1. 清理 ObjectKey：OBS 不喜欢以 "/" 开头的路径
-                    // 如果数据库存的是 "/projects/..."，要去掉第一个斜杠变成 "projects/..."
-                    if (objectKey.startsWith("/")) {
-                        objectKey = objectKey.substring(1);
-                    }
-
-                    // 2. 生成临时签名 URL (有效期 3600秒 = 1小时)
-                    try {
-                        TemporarySignatureRequest request = new TemporarySignatureRequest(
-                                HttpMethodEnum.GET,
-                                3600L
-                        );
-                        request.setBucketName(obsBucket);
-                        request.setObjectKey(objectKey);
-
-                        // 生成带签名的响应
-                        TemporarySignatureResponse response = obsClient.createTemporarySignature(request);
-
-                        // 3. 拿到那个带一长串 Token 的安全链接
-                        vo.setPhotoUrl(response.getSignedUrl());
-
-                    } catch (Exception e) {
-                        // 万一签名失败，降级为空，防止接口崩了
-                        e.printStackTrace();
-                        vo.setPhotoUrl("");
+                    // 🔥 [核心调用] 使用你刚才复制进去的几何算法！
+                    // 缓冲区设为 20.0 米 (和 ProgressServiceImpl 保持一致)
+                    if (isInsideOrBuffered(lat, lng, fence, 20.0)) {
+                        matchedUrl = p.getPhotoUrl(); // 找到了！
+                        break; // 只要一张作为封面即可，跳出循环
                     }
                 }
+            }
+
+            // 3.3 处理 OBS 签名 (私有桶访问权限)
+            if (matchedUrl != null && !matchedUrl.isEmpty()) {
+                String objectKey = matchedUrl;
+                // 去掉开头的 "/" (如果有)
+                if (objectKey.startsWith("/")) {
+                    objectKey = objectKey.substring(1);
+                }
+
+                try {
+                    // 生成临时签名 URL (有效期 1 小时)
+                    TemporarySignatureRequest request = new TemporarySignatureRequest(HttpMethodEnum.GET, 3600L);
+                    request.setBucketName(obsBucket); // 确保使用了配置里的桶名
+                    request.setObjectKey(objectKey);
+
+                    TemporarySignatureResponse response = obsClient.createTemporarySignature(request);
+                    vo.setPhotoUrl(response.getSignedUrl());
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    vo.setPhotoUrl(""); // 签名失败降级为空
+                }
             } else {
-                vo.setPhotoUrl("");
+                vo.setPhotoUrl(""); // 没匹配到照片
             }
 
             historyList.add(vo);
@@ -468,7 +497,158 @@ public class ProgressController {
         return ApiResponse.success("获取生长历史成功", historyList);
     }
 
+    /**
+     * 🔥 [新增接口] 获取某栋楼、某一天在围栏内的【所有】照片
+     * 用于前端点击图表后的“当日详情检视”模式
+     */
+    @GetMapping("/building/{buildingId}/{dateStr}/photos")
+    public ApiResponse<List<String>> getBuildingDailyPhotos(@PathVariable Integer buildingId,
+                                                            @PathVariable String dateStr) {
+        // 1. 获取楼栋和围栏
+        SysBuilding building = sysBuildingMapper.selectById(buildingId);
+        if (building == null) return ApiResponse.error("楼栋不存在");
 
+        List<Coordinate> fence = null;
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            String boundaryJson = building.getBoundaryCoords();
+            if (boundaryJson != null && !boundaryJson.isEmpty()) {
+                fence = mapper.readValue(boundaryJson, new TypeReference<List<Coordinate>>() {});
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        if (fence == null || fence.size() < 3) {
+            return ApiResponse.error("该楼栋未设置电子围栏，无法筛选照片");
+        }
+
+        // 2. 查出当天的所有照片
+        QueryWrapper<ProjectPhoto> photoQuery = new QueryWrapper<>();
+        photoQuery.select("photo_url", "gps_lat", "gps_lng", "lrf_target_lat", "lrf_target_lng");
+        photoQuery.eq("project_id", building.getProjectId());
+        photoQuery.apply("DATE_FORMAT(shoot_time, '%Y-%m-%d') = {0}", dateStr);
+        photoQuery.orderByAsc("shoot_time"); // 按拍摄时间排序
+
+        List<ProjectPhoto> dailyPhotos = projectPhotoMapper.selectList(photoQuery);
+        List<String> validUrls = new ArrayList<>();
+
+        // 3. 空间筛选 (保留围栏内的)
+        for (ProjectPhoto p : dailyPhotos) {
+            double lat = (p.getLrfTargetLat() != null) ? p.getLrfTargetLat().doubleValue() : (p.getGpsLat() != null ? p.getGpsLat().doubleValue() : 0.0);
+            double lng = (p.getLrfTargetLng() != null) ? p.getLrfTargetLng().doubleValue() : (p.getGpsLng() != null ? p.getGpsLng().doubleValue() : 0.0);
+
+            if (lat == 0 || lng == 0) continue;
+
+            // 复用之前的几何算法
+            if (isInsideOrBuffered(lat, lng, fence, 20.0)) {
+                // 4. 签名 URL
+                String signedUrl = "";
+                try {
+                    String objectKey = p.getPhotoUrl();
+                    if (objectKey.startsWith("/")) objectKey = objectKey.substring(1);
+                    TemporarySignatureRequest request = new TemporarySignatureRequest(HttpMethodEnum.GET, 3600L);
+                    request.setBucketName(obsBucket);
+                    request.setObjectKey(objectKey);
+                    TemporarySignatureResponse response = obsClient.createTemporarySignature(request);
+                    signedUrl = response.getSignedUrl();
+                } catch (Exception e) {
+                    signedUrl = p.getPhotoUrl(); // 降级
+                }
+                validUrls.add(signedUrl);
+            }
+        }
+
+        return ApiResponse.success("获取当日照片成功", validUrls);
+    }
+
+
+
+    // =========================================================================
+    // 🔥 [核心算法区] 电子围栏判定 (包含缓冲区逻辑，解决高层投影偏差)
+    // =========================================================================
+
+    /**
+     * 判断点是否在多边形内或缓冲区内 (核心入口)
+     * @param lat 纬度
+     * @param lng 经度
+     * @param polygon 围栏坐标点集合
+     * @param bufferMeters 缓冲区距离 (例如 20.0米)
+     */
+    private boolean isInsideOrBuffered(double lat, double lng, List<Coordinate> polygon, double bufferMeters) {
+        if (polygon == null || polygon.size() < 3) return false;
+
+        // 1. 先判断是否精准在围栏内部 (射线法)
+        if (isPointInPolygon(lat, lng, polygon)) return true;
+
+        // 2. 如果不在内部，判断是否在边缘缓冲区内 (解决高楼投影偏差)
+        return getMinDistanceToBoundary(lat, lng, polygon) <= bufferMeters;
+    }
+
+    /**
+     * 射线法判断点是否在多边形内部
+     */
+    private boolean isPointInPolygon(double lat, double lng, List<Coordinate> polygon) {
+        boolean result = false;
+        for (int i = 0, j = polygon.size() - 1; i < polygon.size(); j = i++) {
+            if ((polygon.get(i).getLat() > lat) != (polygon.get(j).getLat() > lat) &&
+                (lng < (polygon.get(j).getLng() - polygon.get(i).getLng()) * (lat - polygon.get(i).getLat()) / (polygon.get(j).getLat() - polygon.get(i).getLat()) + polygon.get(i).getLng())) {
+                result = !result;
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 计算点到多边形边界的最小距离 (米)
+     */
+    private double getMinDistanceToBoundary(double lat, double lng, List<Coordinate> polygon) {
+        double minDistance = Double.MAX_VALUE;
+        // 简易墨卡托投影系数 (适用于小范围计算)
+        double mPerLat = 111132.92;
+        double mPerLng = 111412.84 * Math.cos(Math.toRadians(lat));
+
+        for (int i = 0; i < polygon.size(); i++) {
+            Coordinate p1 = polygon.get(i);
+            Coordinate p2 = polygon.get((i + 1) % polygon.size());
+
+            // 将经纬度差转换为米
+            double x1 = (p1.getLng() - lng) * mPerLng;
+            double y1 = (p1.getLat() - lat) * mPerLat;
+            double x2 = (p2.getLng() - lng) * mPerLng;
+            double y2 = (p2.getLat() - lat) * mPerLat;
+
+            // 计算点到线段的距离
+            double dist = pointToSegmentDistance(0, 0, x1, y1, x2, y2);
+            if (dist < minDistance) minDistance = dist;
+        }
+        return minDistance;
+    }
+
+    /**
+     * 计算点 (px,py) 到线段 (x1,y1)-(x2,y2) 的最短距离
+     */
+    private double pointToSegmentDistance(double px, double py, double x1, double y1, double x2, double y2) {
+        double dx = x2 - x1;
+        double dy = y2 - y1;
+
+        // 如果线段是一个点
+        if (dx == 0 && dy == 0) return Math.hypot(px - x1, py - y1);
+
+        // 计算投影比例 t
+        double t = ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy);
+
+        // 限制 t 在线段范围内 [0, 1]
+        if (t < 0) t = 0;
+        if (t > 1) t = 1;
+
+        // 计算最近点坐标
+        double nearestX = x1 + t * dx;
+        double nearestY = y1 + t * dy;
+
+        // 返回距离
+        return Math.hypot(px - nearestX, py - nearestY);
+    }
 
 
 

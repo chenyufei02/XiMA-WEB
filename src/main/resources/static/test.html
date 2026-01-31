@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>萤石云最小化测试</title>
+    <style>
+        body { background-color: #333; color: white; padding: 20px; }
+        #player-container {
+            width: 600px;
+            height: 400px;
+            background-color: #000;
+            border: 2px solid red; /* 加个红框证明容器存在 */
+            margin: 0 auto;
+        }
+    </style>
+    <script src="ezuikit.js"></script>
+</head>
+<body>
+    <h2>萤石云本地调试模式</h2>
+    <div id="player-container"></div>
+    <div style="text-align: center; margin-top: 20px;">
+        <button onclick="startPlay()">点击手动播放</button>
+    </div>
+
+    <script>
+        // 你的真实配置 (来自你刚才的日志)
+        const config = {
+            id: 'player-container',
+            // 🔥 1. URL 必须是这种最干净的格式 (既然同事说没加密)
+            url: 'ezopen://open.ys7.com/GG9175016/1.live',
+
+            accessToken: 'at.4ullw0oj7p1sqazfao2z3oh41u5bww6o-58hvzadi0l-08p1mfo-wodyko7uw', // 记得换成你最新的 Token
+
+            // 🔥 2. 补上 template 参数 (官方 Demo 用的是 pcLive，我们也用这个)
+            template: 'pcLive',
+
+            // 🔥 3. 严格指向本地路径 (这是官方 Demo 第64行的要求)
+            // 确保你的 src/main/resources/static/ 下有 ezuikit_static 文件夹
+            staticPath: '/ezuikit_static',
+
+            width: 600,
+            height: 400,
+        };
+
+        function startPlay() {
+            console.log("🚀 开始启动 (官方标准配置版)...");
+            if (typeof EZUIKit === 'undefined') {
+                alert("JS文件没加载到！请检查 ezuikit.js 路径");
+                return;
+            }
+
+            player = new EZUIKit.EZUIKitPlayer({
+                ...config,
+                autoplay: true,
+                handleError: (err) => console.error("❌ 播放报错:", err),
+                handleSuccess: () => console.log("✅ 播放成功!")
+            });
+        }
+    </script>
+</body>
+</html>

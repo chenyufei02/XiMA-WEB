@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
-    <script src="https://open.ys7.com/sdk/js/1.5/ezuikit.js"></script>
+    <script src="ezuikit.js"></script>
     <style>
         /* --- 1. 全局变量与基础样式 --- */
         :root {
@@ -189,7 +189,7 @@
         }
         /* 视频标题角标 */
         .video-label {
-            position: absolute; top: 10px; left: 10px; z-index: 10;
+            position: absolute; top: 50px; left: 10px; z-index: 10;
             background: rgba(0,0,0,0.6); color: #fff; padding: 4px 8px;
             font-size: 12px; border-radius: 4px; display: flex; align-items: center; gap: 6px;
         }
@@ -503,59 +503,166 @@
         .video-settings:hover { background: var(--accent-purple); color: #fff; border-color: var(--accent-purple); }
 
 
-        /* 🔥 [新增] 时光机回溯框样式 */
+        /* --- 🎬 新版时光机样式 (左右分栏) --- */
+        /* 🔥 [新增] 默认封面样式 (在没照片时显示) */
+        .tm-default-cover {
+            width: 100%; height: 100%;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            background: linear-gradient(45deg, #1e1e2f, #2b2b3c); /* 👈 科技感渐变底色 */
+            color: #666;
+        }
+
         .time-machine-box {
-            height: 300px; /* 固定高度 */
-            background: #000;
-            position: relative;
-            border-top: 1px solid var(--border-color);
+            height: 400px; /*稍微加高一点，让照片看爽*/
+            background: #0f0f13; /* 深空灰背景 */
+            border: 1px solid #2b2b3c;
+            border-radius: 8px;
+            display: flex; /* 左右布局核心 */
             overflow: hidden;
+            position: relative;
+            margin-bottom: 25px; /* 与下方隔开 */
+        }
+
+        /* 左侧：数据仪表盘 */
+        .tm-left-panel {
+            width: 320px; /* 固定宽度 */
+            background: rgba(30, 30, 40, 0.9);
+            border-right: 1px solid #3b3b4f;
+            padding: 25px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            position: relative;
+            z-index: 2; /* 保证在图片上层 */
+        }
+
+        /* 右侧：视觉展示区 */
+        /* [修改] 右侧面板：增加点击手势，处理封面背景 */
+        .tm-right-panel {
+            flex: 1;
+            position: relative;
+            background: #000; /* 纯黑背景 */
             display: flex;
             align-items: center;
             justify-content: center;
+            cursor: pointer; /* 👈 让用户知道这里可以点 */
+            overflow: hidden;
         }
 
-        /* 图片自适应，保证不拉伸 */
         .tm-image {
             width: 100%;
             height: 100%;
-            object-fit: contain; /* 保持比例，可能有黑边 */
-            /* 或者用 cover 填满，但可能会裁切掉楼顶 */
-            transition: opacity 0.2s;
+            object-fit: contain; /* 保持比例，完整展示 */
+            transition: opacity 0.3s ease;
         }
 
-        /* 播放按钮遮罩 */
-        .tm-play-mask {
+        /* 数据项样式 */
+        .tm-data-row { margin-bottom: 20px; }
+        .tm-label { color: #666; font-size: 12px; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 1px; }
+        .tm-value { color: #fff; font-size: 24px; font-weight: bold; font-family: 'Consolas', monospace; }
+        .tm-value.highlight { color: var(--accent-blue); }
+
+
+        /* 播放控制区 */
+        .tm-controls {
+            margin-top: auto; /* 推到底部 */
+            display: flex; align-items: center; gap: 15px;
+            padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1);
+        }
+
+        /* 遮罩层 (未播放时显示) */
+        .tm-overlay {
             position: absolute; top:0; left:0; right:0; bottom:0;
-            background: rgba(0,0,0,0.3);
+            background: rgba(0,0,0,0.4);
             display: flex; align-items: center; justify-content: center;
-            cursor: pointer;
-            z-index: 20;
-            transition: all 0.3s;
+            cursor: pointer; z-index: 10;
+            backdrop-filter: blur(2px);
         }
-        .tm-play-mask:hover { background: rgba(0,0,0,0.1); }
-        .tm-play-btn {
-            font-size: 60px; color: rgba(255,255,255,0.8);
-            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5));
+        .tm-overlay:hover { background: rgba(0,0,0,0.2); }
+
+
+        /* ============================================
+       🔥 [终极修复] 进度条全新样式 (加在 style 最后)
+       ============================================ */
+
+        /* 1. 轨道背景 (深灰色，带边框) */
+        .tm-new-track {
+            width: 100%;
+            height: 10px; /* 高度足够大 */
+            background-color: rgba(255, 255, 255, 0.15); /* 半透明灰白色，在深色背景下很明显 */
+            border: 1px solid rgba(255, 255, 255, 0.3);  /* 加个亮边框，确保你能看到位置 */
+            border-radius: 5px;
+            overflow: hidden; /* 切掉圆角溢出 */
+            position: relative;
         }
 
-        /* 顶部信息条 (半透明悬浮) */
-        .tm-info-bar {
-            position: absolute; top: 15px; left: 15px; z-index: 10;
-            background: rgba(0, 0, 0, 0.6);
-            backdrop-filter: blur(4px);
-            padding: 8px 15px;
-            border-radius: 6px;
-            border-left: 3px solid var(--accent-blue);
-            color: #fff;
-            font-family: 'Consolas', monospace;
-            display: flex; gap: 15px;
-            font-size: 14px;
+        /* 2. 填充条 (亮蓝色渐变，强制显示) */
+        .tm-new-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00c6ff, #0072ff) !important; /* 强制亮蓝 */
+            box-shadow: 0 0 10px rgba(0, 198, 255, 0.8); /* 荧光发光效果 */
+            transition: width 0.2s linear; /* 丝滑动画 */
+            min-width: 0px;
         }
-        .tm-info-item i { color: var(--text-secondary); margin-right: 5px; }
+
+        /* 左上角检视标签 */
         .tm-tag {
-            background: var(--accent-purple); padding: 2px 6px;
-            border-radius: 4px; font-size: 12px; font-weight: bold;
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            background: rgba(234, 84, 85, 0.9); /* 红色醒目背景 */
+            color: white;
+            padding: 5px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            z-index: 20;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+
+
+        /* =========================================
+       🔥 [新增] 超大号翻页箭头 (粘贴在 style 最后)
+       ========================================= */
+        .tm-arrow {
+            position: absolute;
+            top: 0;
+            bottom: 0; /* 撑满整个高度，防误触 */
+            width: 80px; /* 宽度加大，方便点击 */
+            background: transparent;
+            color: rgba(255, 255, 255, 0.4); /* 默认半透明 */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 50; /* 保证最顶层，盖住图片 */
+            transition: all 0.2s;
+        }
+
+        /* 鼠标放上去时，背景变黑，图标变亮 */
+        .tm-arrow:hover {
+            background: rgba(0, 0, 0, 0.4);
+            color: #fff;
+        }
+
+        /* 强制左边 */
+        .tm-arrow-left {
+            left: 0 !important;
+            right: auto !important;
+        }
+
+        /* 强制右边 */
+        .tm-arrow-right {
+            right: 0 !important;
+            left: auto !important;
+        }
+
+        /* 图标超级大 */
+        .tm-arrow i {
+            font-size: 60px !important; /* 🔥 3倍大小 */
+            font-weight: bold;
+            filter: drop-shadow(0 2px 5px rgba(0,0,0,0.8)); /* 加个阴影，防止背景太白看不清 */
         }
 
     </style>
@@ -710,10 +817,13 @@
 
                     <div class="monitor-video-row" id="video-container">
                         <div class="video-label"><div class="dot"></div> 现场 LIVE | 1号机位</div>
-                        <div class="video-settings" @click="openCameraConfig" title="配置摄像头">
-                            <i class="el-icon-setting"></i> 配置信号源
+                        <div
+                            class="video-settings"
+                            @click="showCameraDialog = true"
+                            style="position: absolute; right: 10px; top: 10px; z-index: 2147483647 !important; cursor: pointer;">
+                            ⚙️ 配置信号源
                         </div>
-                        <div id="ezviz-player" style="width: 100%; height: 100%;"></div>
+                        <div id="ezviz-player" style="width: 100%; height: 400px; background: #000;"></div>
 
                         <div v-if="!cameraConfigured" style="color: #666; text-align: center;">
                             <i class="el-icon-video-camera" style="font-size: 40px; margin-bottom: 10px;"></i>
@@ -806,29 +916,117 @@
                             </div>
                         </div>
 
-                        <div class="time-machine-box">
-                            <img :src="getTmImage(b)" class="tm-image" alt="暂无照片">
+                        <div class="time-machine-box" :id="'tm-anchor-' + b.buildingId">
 
-                            <div class="tm-info-bar" v-if="b.history && b.history.length > 0">
-                                <span class="tm-info-item"><i class="el-icon-date"></i> {{ getTmCurrent(b).date }}</span>
-                                <span class="tm-info-item"><i class="el-icon-office-building"></i> {{ getTmCurrent(b).floor }}层</span>
-                                <span class="tm-info-item"><i class="el-icon-s-data"></i> {{ getTmCurrent(b).height }}m</span>
-                                <span v-if="b.isPlaying" class="tm-tag">▶️ 回溯中...</span>
-                            </div>
+                            <div class="tm-left-panel">
+                                <div style="font-size: 16px; font-weight: bold; color: #fff; margin-bottom: 25px; display: flex; align-items: center; padding-top: 5px;">
+                                    <i class="el-icon-film" style="margin-right: 8px; color: #00cfe8;"></i>
+                                    <span>建筑生长回溯</span>
+                                </div>
 
-                            <div class="tm-play-mask" v-if="!b.isPlaying" @click="togglePlay(b)">
-                                <i class="el-icon-video-play tm-play-btn"></i>
-                                <div style="position:absolute; bottom:20px; color:#fff; font-size:14px; opacity:0.8;">
-                                    {{ b.historyLoaded ? '点击继续回溯' : '点击开始生长回溯' }}
+                                <div v-if="!b.isInspectionMode" style="display: flex; flex-direction: column; height: 100%;">
+                                    <div class="tm-data-row">
+                                        <div class="tm-label"><i class="el-icon-date"></i> 拍摄日期</div>
+                                        <div class="tm-value">{{ getTmCurrent(b).date || '--' }}</div>
+                                    </div>
+                                    <div class="tm-data-row">
+                                        <div class="tm-label"><i class="el-icon-office-building"></i> 当前楼层</div>
+                                        <div class="tm-value highlight">{{ getTmCurrent(b).floor }} <span style="font-size:14px;color:#666">F</span></div>
+                                    </div>
+                                    <div class="tm-data-row">
+                                        <div class="tm-label"><i class="el-icon-s-data"></i> 物理高度</div>
+                                        <div class="tm-value">{{ getTmCurrent(b).height }} <span style="font-size:14px;color:#666">m</span></div>
+                                    </div>
+
+                                    <div style="margin-top: auto;">
+                                        <div style="display: flex; justify-content: space-between; font-size: 12px; color: #ccc; margin-bottom: 6px;">
+                                            <span>回溯进度</span>
+                                            <span>{{ b.playableHistory && b.playableHistory.length > 0 ? Math.round(getPlayProgress(b)) : 0 }}%</span>
+                                        </div>
+                                        <div class="tm-new-track">
+                                            <div class="tm-new-fill" :style="{ width: getPlayProgress(b) + '%' }"></div>
+                                        </div>
+                                        <div style="text-align: right; color: #666; font-size: 12px; margin-top: 5px; margin-bottom: 15px;">
+                                            {{ b.playIndex + 1 }} / {{ b.playableHistory ? b.playableHistory.length : 0 }}
+                                        </div>
+                                    </div>
+
+                                    <div class="tm-controls">
+                                        <el-button type="primary" circle
+                                            :icon="b.isPlaying ? 'el-icon-video-pause' : 'el-icon-video-play'"
+                                            @click="togglePlay(b)">
+                                        </el-button>
+                                        <el-select v-model="b.playSpeed" size="small" placeholder="倍速" style="width: 100px;">
+                                            <el-option label="0.5x" :value="2000"></el-option>
+                                            <el-option label="1.0x" :value="1000"></el-option>
+                                            <el-option label="2.0x" :value="500"></el-option>
+                                        </el-select>
+                                    </div>
+                                </div>
+
+                                <div v-else style="display: flex; flex-direction: column; height: 100%;">
+                                    <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                                        <div style="color: #00cfe8; font-size: 18px; font-weight: bold; margin-bottom: 5px;">
+                                            {{ b.inspectDate }}
+                                        </div>
+                                        <div style="color: #aaa; font-size: 12px;">单日详情检视</div>
+                                    </div>
+
+                                    <div class="tm-data-row">
+                                        <div class="tm-label">当前照片</div>
+                                        <div class="tm-value">{{ b.inspectIndex + 1 }} <span style="font-size:20px; color:#666">/ {{ b.dailyPhotos.length }}</span></div>
+                                    </div>
+
+                                    <div style="color: #888; font-size: 13px; line-height: 1.6; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 4px;">
+                                        <i class="el-icon-info" style="color: var(--accent-blue)"></i> 操作提示：<br>
+                                        1. 点击画面两侧箭头翻页。<br>
+                                        2. 点击下方按钮可<b>结束检视并继续自动回溯</b>。
+                                    </div>
+
+                                    <div style="margin-top: auto;">
+                                        <el-button type="success" icon="el-icon-video-play" style="width: 100%; font-weight: bold;" @click="exitInspectionMode(b)">
+                                            返回时光机继续播放
+                                        </el-button>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div v-if="b.isPlaying"
-                                 style="position:absolute; bottom:15px; right:15px; cursor:pointer; z-index:30; background:rgba(0,0,0,0.5); padding:5px 10px; border-radius:4px; color:#fff;"
-                                 @click="togglePlay(b)">
-                                <i class="el-icon-video-pause"></i> 暂停
+                            <div class="tm-right-panel" @click="togglePlay(b)">
+
+                                <div class="tm-tag" v-if="b.isInspectionMode">
+                                    <div style="font-size: 14px; margin-bottom: 2px;">
+                                        📅 {{ b.inspectDate }} 详情检视
+                                    </div>
+                                    <div style="font-size: 12px; opacity: 0.9; border-top: 1px solid rgba(255,255,255,0.3); padding-top: 2px; margin-top: 2px;">
+                                        <i class="el-icon-office-building"></i> {{ b.inspectFloor || '-' }}F
+                                        &nbsp;|&nbsp;
+                                        <i class="el-icon-s-data"></i> {{ b.inspectHeight || '-' }}m
+                                    </div>
+                                </div>
+
+                                <img v-if="getTmImage(b)" :src="getTmImage(b)" class="tm-image" :class="{ 'blur-cover': !b.isPlaying && !b.isInspectionMode }" alt="影像回溯">
+                                <div v-else class="tm-default-cover"><i class="el-icon-loading" v-if="b.isLoadingHistory"></i><span v-else>暂无影像</span></div>
+
+                                <div class="tm-arrow tm-arrow-left"
+                                     v-show="(b.isInspectionMode && b.inspectIndex > 0) || (!b.isInspectionMode && !b.isPlaying && b.playIndex > 0)"
+                                     @click.stop="prevPhoto(b)">
+                                    <i class="el-icon-arrow-left"></i>
+                                </div>
+
+                                <div class="tm-arrow tm-arrow-right"
+                                     v-show="(b.isInspectionMode && b.inspectIndex < b.dailyPhotos.length - 1) || (!b.isInspectionMode && !b.isPlaying && b.playIndex < (b.playableHistory.length - 1))"
+                                     @click.stop="nextPhoto(b)">
+                                    <i class="el-icon-arrow-right"></i>
+                                </div>
+
+                                <div class="tm-overlay" v-if="!b.isInspectionMode && !b.isPlaying && b.historyLoaded">
+                                    <div style="text-align: center; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.8);">
+                                        <i :class="b.playIndex >= b.playableHistory.length - 1 ? 'el-icon-refresh-left' : 'el-icon-video-play'" style="font-size: 60px;"></i>
+                                        <div style="margin-top: 10px; font-weight: bold;">{{ b.playIndex >= b.playableHistory.length - 1 ? '重新回溯' : '继续自动放映' }}</div>
+                                    </div>
+                                </div>
                             </div>
-                    </div>
+                        </div>
 
                     <div v-if="dashboardData.buildings.length === 0" class="empty-state">
                         <i class="el-icon-document-delete"></i>
@@ -867,6 +1065,7 @@
 <script src="https://unpkg.com/vue@2/dist/vue.js"></script>
 <script src="https://unpkg.com/element-ui/lib/index.js"></script>
 <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+<script src="ezuikit.js"></script>
 
 <script>
     new Vue({
@@ -958,83 +1157,182 @@
             if (this.monitorTimer) clearInterval(this.monitorTimer);
         },
         methods: {
-            // --- 时光机逻辑开始 ---
+            // --- 🎬 新版时光机逻辑 ---
 
-            // 1. 获取当前应该显示的图片
-            getTmImage(b) {
-                // 如果正在播放，且有数据，显示当前帧
-                if (b.history && b.history.length > 0) {
-                    const currentItem = b.history[b.playIndex];
-                    // 如果那天有照片，显示照片；没照片，显示一张默认图或者空
-                    return currentItem.photoUrl || 'https://via.placeholder.com/800x600/000000/FFFFFF?text=No+Photo';
-                }
-                // 如果没开始播放，默认显示该楼栋"最新一次实测"那一天的照片(如果有)，或者空
-                // 这里简单处理：如果没有历史数据，就显示个黑色背景图
-                return 'https://via.placeholder.com/800x600/1e1e2d/aaaaaa?text=Building+Timelapse';
-            },
-
-            // 2. 获取当前帧的信息
+            // 1. 获取当前显示的对象 (从过滤后的列表中取)
             getTmCurrent(b) {
-                if (b.history && b.history[b.playIndex]) {
-                    return b.history[b.playIndex];
+                if (b.playableHistory && b.playableHistory.length > 0) {
+                    return b.playableHistory[b.playIndex] || {};
                 }
-                return { date: '--', floor: 0, height: 0 };
+                // 没数据时，返回空对象
+                return {};
             },
 
-            // 3. 开关播放 (核心懒加载逻辑)
+            // 2. 获取图片
+            // 获取当前图片 URL (双模式支持)
+            getTmImage(b) {
+                if (b.isInspectionMode) {
+                    // 检视模式：取单日列表
+                    if (b.dailyPhotos && b.dailyPhotos.length > 0) {
+                        return b.dailyPhotos[b.inspectIndex];
+                    }
+                } else {
+                    // 播放模式：取历史总表
+                    if (b.historyLoaded && b.playableHistory.length > 0) {
+                        return b.playableHistory[b.playIndex].photoUrl;
+                    }
+                }
+                return '';
+            },
+
+            // 上一张
+            prevPhoto(b) {
+                if (b.isInspectionMode) {
+                    if (b.inspectIndex > 0) b.inspectIndex--;
+                } else {
+                    if (b.playIndex > 0) b.playIndex--;
+                }
+            },
+
+            // 下一张
+            nextPhoto(b) {
+                if (b.isInspectionMode) {
+                    if (b.dailyPhotos && b.inspectIndex < b.dailyPhotos.length - 1) {
+                        b.inspectIndex++;
+                    }
+                } else {
+                    if (b.playableHistory && b.playIndex < b.playableHistory.length - 1) {
+                        b.playIndex++;
+                    }
+                }
+            },
+
+            // 3. 计算进度条百分比
+            getPlayProgress(b) {
+                // 安全检查
+                if (!b || !b.playableHistory || b.playableHistory.length <= 1) {
+                    return 0;
+                }
+
+                // 计算百分比: (当前索引 / (总数 - 1)) * 100
+                // 比如总共 41 张，当前第 0 张 -> 0%
+                // 当前第 40 张 -> 100%
+                let pct = (b.playIndex / (b.playableHistory.length - 1)) * 100;
+
+                // 限制在 0-100 之间
+                return Math.min(Math.max(pct, 0), 100);
+            },
+
+            //  [新增] 专门用来预加载历史数据的方法
+            // 作用：页面一打开，就悄悄把“日期列表”拉下来，这样封面就能显示第一天的照片
+            loadHistory(building) {
+                const token = localStorage.getItem('token');
+
+                // 防止重复请求
+                if (building.isLoadingHistory) return;
+                this.$set(building, 'isLoadingHistory', true);
+
+                axios.get(`/api/progress/building/${building.buildingId}/history`, {
+                    headers: { 'Authorization': token ? 'Bearer ' + token : '' }
+                }).then(res => {
+                    this.$set(building, 'isLoadingHistory', false); // 停止转圈
+
+                    if ((res.data.code || res.data.status) === 200) {
+                        const rawList = res.data.data;
+
+                        // 过滤出有 photoUrl 的数据
+                        const validList = rawList.filter(item => item.photoUrl && item.photoUrl.trim() !== '');
+
+                        building.history = rawList;
+                        building.playableHistory = validList;
+                        building.historyLoaded = true;
+
+                        // 🔥 [核心] 强制设为 0，确保默认显示第一张（起点）
+                        // 这样左边的日期和右边的模糊封面就都有了！
+                        building.playIndex = 0;
+                    }
+                }).catch(() => {
+                    this.$set(building, 'isLoadingHistory', false);
+                });
+            },
+
+            // 4. 切换播放状态
             togglePlay(building) {
                 if (building.isPlaying) {
-                    // 停止播放
+                    // 暂停
                     clearInterval(building.playTimer);
                     building.isPlaying = false;
                 } else {
-                    // 开始播放
-                    // 如果数据还没加载，先去后端请求 (懒加载！)
+                    // 播放
                     if (!building.historyLoaded) {
                         const token = localStorage.getItem('token');
-                        this.$message.info("正在加载生长历史数据...");
+                        this.$set(building, 'isLoadingHistory', true); // 👈 加个加载状态，显示转圈圈
 
                         axios.get(`/api/progress/building/${building.buildingId}/history`, {
                             headers: { 'Authorization': token ? 'Bearer ' + token : '' }
                         }).then(res => {
-                            if ((res.data.code || res.data.status) === 200) {
-                                building.history = res.data.data;
-                                building.historyLoaded = true;
+                            this.$set(building, 'isLoadingHistory', false); // 关闭转圈
 
-                                if (building.history.length === 0) {
-                                    this.$message.warning("该楼栋暂无历史数据");
+                            if ((res.data.code || res.data.status) === 200) {
+                                const rawList = res.data.data;
+                                const validList = rawList.filter(item => item.photoUrl && item.photoUrl.trim() !== '');
+
+                                if (validList.length === 0) {
+                                    this.$message.warning("暂无影像数据");
                                     return;
                                 }
-                                // 数据回来后，开始播放
+
+                                building.history = rawList;
+                                building.playableHistory = validList;
+                                building.historyLoaded = true;
+                                building.playIndex = 0; // 从头开始
+
                                 this.startPlayback(building);
                             }
+                        }).catch(() => {
+                             this.$set(building, 'isLoadingHistory', false);
                         });
                     } else {
-                        // 数据已有，直接继续播放
+                        // 如果已经播到最后一张了，再次点击应该是"重播"
+                        if (building.playIndex >= building.playableHistory.length - 1) {
+                            building.playIndex = 0;
+                        }
                         this.startPlayback(building);
                     }
                 }
             },
 
-            // 4. 执行播放循环
+            // 5. 开始循环
             startPlayback(building) {
                 building.isPlaying = true;
 
-                // 如果已经播完了，重头开始
-                if (building.playIndex >= building.history.length - 1) {
-                    building.playIndex = 0;
-                }
+                if (building.playTimer) clearInterval(building.playTimer);
 
                 building.playTimer = setInterval(() => {
+                    // 1. 先增加索引
                     building.playIndex++;
-                    // 播到最后一张，自动停止，或者循环播放？这里设为循环
-                    if (building.playIndex >= building.history.length) {
-                        building.playIndex = 0; // 循环播放
-                        // clearInterval(building.playTimer); building.isPlaying = false; // 如果想播完停止用这行
+
+                    // 2. 检查是否播完了
+                    if (building.playIndex >= building.playableHistory.length) {
+                        // 🔥 [核心修改] 播完停止，而不是循环
+                        clearInterval(building.playTimer);
+                        building.isPlaying = false;
+
+                        // 让画面停在最后一张？还是回到第一张？
+                        // 用户说"回到封面起点"，所以我们设为 0
+                        building.playIndex = 0;
                     }
-                }, 500); // 🔥 500毫秒切换一张，速度可调
+                }, building.playSpeed);
             },
-            // --- 时光机逻辑结束 ---
+
+            // 6. 改变速度时触发
+            changeSpeed(building) {
+                // 如果正在播放，需要重置定时器才能生效
+                if (building.isPlaying) {
+                    clearInterval(building.playTimer);
+                    this.startPlayback(building);
+                }
+            },
 
             // 返回首页
             goHome() {
@@ -1129,8 +1427,16 @@
                             this.$set(b, 'isPlaying', false);      // 是否正在播放
                             this.$set(b, 'historyLoaded', false);  // 历史数据是否已加载
                             this.$set(b, 'history', []);           // 历史数据列表
+
+                            // 🔥 [新增] 过滤后的播放列表 (只存有图的)
+                            this.$set(b, 'playableHistory', []);
+                            // 🔥 [新增] 默认速度 1000ms (1秒)
+                            this.$set(b, 'playSpeed', 1000);
+
                             this.$set(b, 'playIndex', 0);          // 当前播放到第几张
                             this.$set(b, 'playTimer', null);       // 定时器ID
+
+                            this.loadHistory(b);
                         });
                         this.loading = false;
 
@@ -1152,6 +1458,8 @@
                 });
             },
 
+
+
             // 🔥 [新增] 获取监控面板数据接口
             fetchMonitorData() {
                 const token = localStorage.getItem('token');
@@ -1166,40 +1474,102 @@
                 }).catch(console.error);
             },
 
-            // 🔥 [更新] 初始化播放器 (改为读取 monitorData)
+
+            // 🔥 [最终修复版] 初始化播放器 (带 Loading 等待机制)
+            // 🔥 [最终终极版] 初始化播放器 (等待DOM + 等待SDK)
+            // 🔥 [最终完美版] 初始化播放器 (修复高度0问题 + 防止重复刷新)
+            // 🔥 [最终项目版] 初始化播放器 (同步官方Demo标准配置)
             initPlayer() {
-
-                // 🔴 [新增保护] 如果 monitorData 还没加载好，或者是空的，直接不执行
-                if (!this.monitorData) return;
-
-                // 1. 从后端返回的数据中获取 URL 和 Token
-                const ezvizUrl = this.monitorData.ezvizUrl;
-                const ezvizToken = this.monitorData.ezvizToken;
-
-                // 2. 如果没有 URL，说明未配置或后端获取 Token 失败
-                if (!ezvizUrl || !ezvizToken) {
-                    this.cameraConfigured = false;
-                    return; // 退出，等待下次数据刷新
+                // 1. 等待 Loading 结束
+                if (this.loading) {
+                    setTimeout(() => { this.initPlayer(); }, 500);
+                    return;
                 }
 
-                // 3. 有数据了，标记为已配置
+                // 2. 等待 SDK 加载 (本地化检测)
+                if (typeof EZUIKit === 'undefined') {
+                    console.warn("⚠️ 等待萤石云 SDK 加载...");
+                    setTimeout(() => { this.initPlayer(); }, 500);
+                    return;
+                }
+
+                // 3. 数据检查
+                // 优先取监控数据，如果没有则取表单数据
+                const finalToken = this.monitorData?.ezvizToken || this.cameraForm.appKey; // 注意：这里逻辑上其实应该是 Token，但如果后端还没生成Token，可能需要其他处理。通常 monitorData 会带有最新的 Token。
+                const serial = this.monitorData?.serial || this.cameraForm.serial;
+                const code = this.monitorData?.validateCode || this.cameraForm.validateCode;
+
+                if (!finalToken || !serial) return;
+
                 this.cameraConfigured = true;
 
-                this.$nextTick(() => {
-                    // 如果播放器已经存在，就不重复创建了 (或者你可以销毁重建，视情况而定)
-                    if (this.ezvizPlayer) return;
+                // 4. 生成 URL (严格的判断逻辑)
+                let playUrl = "";
+                // 只有当验证码存在且不为空时，才拼接到 URL 里
+                if (code && code.trim() !== '') {
+                    playUrl = `ezopen://${code}@open.ys7.com/${serial}/1.live`;
+                } else {
+                    playUrl = `ezopen://open.ys7.com/${serial}/1.live`;
+                }
 
-                    if (typeof EZUIKit !== 'undefined') {
-                        console.log("启动播放器:", ezvizUrl);
+                // 防抖动：如果 URL 没变且播放器实例存在，就不销毁重建
+                if (this.ezvizPlayer && this.lastPlayUrl === playUrl) {
+                    console.log("📺 播放地址未变，保持状态");
+                    return;
+                }
+                this.lastPlayUrl = playUrl;
+
+                console.log("📺 启动播放:", playUrl);
+
+                // 5. 渲染播放器
+                this.$nextTick(() => {
+                    const containerId = 'ezviz-player';
+                    const container = document.getElementById(containerId);
+
+                    if (!container) return;
+
+                    // 销毁旧实例
+                    if (this.ezvizPlayer) {
+                        try { this.ezvizPlayer.stop(); } catch(e){}
+                        this.ezvizPlayer = null;
+                        container.innerHTML = "";
+                    }
+
+                    try {
                         this.ezvizPlayer = new EZUIKit.EZUIKitPlayer({
-                            id: 'ezviz-player',
+                            id: containerId,
+
+                            // 🔥 [核心配置] 自动播放 + 你的 Token
                             autoplay: true,
-                            url: ezvizUrl,
-                            accessToken: ezvizToken,
-                            decoderPath: 'https://open.ys7.com/sdk/js/1.5/',
+                            accessToken: finalToken,
+                            url: playUrl,
+
+                            // 🔥 [同步官方Demo] 加上模版，防止UI渲染问题
+                            template: 'pcLive',
+
+                            // 🔥 [同步官方Demo] 强制指向本地静态资源目录
+                            // 确保 src/main/resources/static/ezuikit_static 存在
+                            staticPath: '/ezuikit_static',
+                            // decoderPath 保留作为双重保险
+                            decoderPath: '/ezuikit_static',
+
+                            // 🔥 [防塌陷] 强制指定高度数字 (不要用百分比)
                             width: '100%',
-                            height: 300,
+                            height: 400,
+
+                            handleError: (err) => {
+                                console.error("❌ 播放报错:", err);
+                                // 如果报错 20018，可以在界面上提示用户
+                                if(err && err.msg && err.msg.includes("不拥有该设备")){
+                                    this.$message.error("播放失败：设备未绑定到当前账号，请联系管理员绑定设备！");
+                                }
+                            },
+                            handleSuccess: () => {
+                                console.log("✅ 画面加载成功！");
+                            }
                         });
+                    } catch (e) {
+                        console.error("❌ 初始化异常:", e);
                     }
                 });
             },
@@ -1302,6 +1672,32 @@
                         }]
                     });
 
+                    // =========================================================
+                    // 🔥 [新增] 图表点击联动 (把三个图表绑在一起)
+                    // =========================================================
+                    const charts = [chartTrend, chartHeight, chartDiff];
+
+                    charts.forEach(chart => {
+                        // 1. 先解绑，防止重复绑定
+                        if (chart) {
+                            chart.off('click');
+
+                            // 2. 绑定点击事件
+                            chart.on('click', (params) => {
+                                // ECharts 的 params.name 在这里就是 X 轴的值 (即日期 "2025-xx-xx")
+                                const clickedDate = params.name;
+                                console.log("点击了图表日期:", clickedDate);
+
+                                // 3. 只有当点击的是有效日期时，才触发
+                                if (clickedDate) {
+                                    // 调用我们在 methods 里写好的 "进入检视模式"
+                                    // 这里的 'b' 就是 forEach 循环当前的楼栋对象
+                                    this.enterInspectionMode(b, clickedDate);
+                                }
+                            });
+                        }
+                    });
+
                     window.addEventListener('resize', () => {
                         chartTrend.resize(); chartHeight.resize(); chartDiff.resize();
                     });
@@ -1400,9 +1796,13 @@
                     headers: { 'Authorization': 'Bearer ' + token }
                 }).then(res => {
                     if((res.data.code || res.data.status) === 200) {
-                        this.$message.success("配置保存成功，正在尝试连接...");
+                        this.$message.success("配置保存成功，正在重置连接...");
                         this.showCameraDialog = false;
-                        // 保存成功后，立即刷新数据，获取最新的播放地址
+
+                        // 🔥 [新增] 强制清空上次记录，打破“防抖动”锁
+                        this.lastPlayUrl = null;
+
+                        // 立即刷新
                         this.fetchMonitorData();
                     } else {
                         this.$message.error(res.data.message);
@@ -1410,6 +1810,79 @@
                 }).finally(() => this.savingCamera = false);
             },
 
+
+            // 进入检视模式 (点击图表触发)
+            enterInspectionMode(building, dateStr) {
+                // =================================================
+                // 🔥 [新增] 自动滚动定位：把时光机拉到屏幕中央
+                // =================================================
+                this.$nextTick(() => {
+                    const tmDom = document.getElementById('tm-anchor-' + building.buildingId);
+                    if (tmDom) {
+                        // block: 'center' 会让这个元素尽量处于屏幕正中间
+                        // 这样既能看到上面的图表，也能看到下面的照片，完美符合你的要求！
+                        tmDom.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                    }
+                });
+
+                const token = localStorage.getItem('token');
+
+                // 1. 暂停播放
+                building.isPlaying = false;
+                clearInterval(building.playTimer);
+
+                // 2. 初始化检视状态
+                this.$set(building, 'isInspectionMode', true);
+                this.$set(building, 'inspectDate', dateStr);
+                this.$set(building, 'inspectIndex', 0);
+                this.$set(building, 'dailyPhotos', []); // 先清空，显示 loading
+
+                // 🔥 [新增] 在历史列表里查找这一天的数据，为了显示在左上角标签里
+                // building.history 是我们在 loadHistory 里存的完整列表
+                if (building.history) {
+                    const dayData = building.history.find(item => item.date === dateStr);
+                    if (dayData) {
+                        this.$set(building, 'inspectFloor', dayData.floor);
+                        this.$set(building, 'inspectHeight', dayData.height);
+                    } else {
+                        // 如果没找到（极少情况），给个默认值
+                        this.$set(building, 'inspectFloor', '-');
+                        this.$set(building, 'inspectHeight', '-');
+                    }
+                }
+                this.$message.info(`正在获取 ${dateStr} 的全部影像...`);
+
+
+                // 3. 调用后端新接口
+                axios.get(`/api/progress/building/${building.buildingId}/${dateStr}/photos`, {
+                    headers: { 'Authorization': token ? 'Bearer ' + token : '' }
+                }).then(res => {
+                    if ((res.data.code || res.data.status) === 200) {
+                        const photos = res.data.data;
+                        if (photos && photos.length > 0) {
+                            this.$set(building, 'dailyPhotos', photos);
+                            this.$message.success(`已加载 ${photos.length} 张照片`);
+                        } else {
+                            this.$message.warning("当日无符合条件的影像");
+                            this.exitInspectionMode(building); // 没照片就退出去
+                        }
+                    } else {
+                        this.$message.error("获取影像失败");
+                        this.exitInspectionMode(building);
+                    }
+                }).catch(() => {
+                    this.$message.error("网络请求异常");
+                    this.exitInspectionMode(building);
+                });
+            },
+
+            // 退出检视模式
+            exitInspectionMode(building) {
+                // 1. 关闭开关
+                this.$set(building, 'isInspectionMode', false);
+                this.$set(building, 'dailyPhotos', []); // 释放内存
+
+            },
 
 
         }

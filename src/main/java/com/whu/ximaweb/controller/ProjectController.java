@@ -29,13 +29,8 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.text.SimpleDateFormat;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
-import com.whu.ximaweb.mapper.SysTaskLogMapper;
 import com.whu.ximaweb.model.SysTaskLog;
 
 @RestController
@@ -75,8 +70,10 @@ public class ProjectController {
     @Autowired
     private com.whu.ximaweb.service.EzvizService ezvizService; // 🔥 [新增]
 
+
     /**
      * [新增接口] 获取项目的自动化监控面板数据
+     * 🔥 已修复：URL拼接顺序错误、缺少序列号回传的问题
      */
     @GetMapping("/{id}/monitor")
     public ApiResponse<MonitorVo> getMonitorData(@PathVariable Integer id) {
@@ -85,36 +82,37 @@ public class ProjectController {
 
         MonitorVo vo = new MonitorVo();
 
-        // 🔥 [修复1] 强制设置中国时区，解决时间显示不对的问题
+        // 1. 设置时区 (修复时间显示问题)
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         sdf.setTimeZone(TimeZone.getTimeZone("Asia/Shanghai"));
 
-        // 🔥 [修复2] 日志时间格式增加年月日
-        SimpleDateFormat timeSdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-        timeSdf.setTimeZone(TimeZone.getTimeZone("Asia/Shanghai"));
-
-        // 🔥 [新增] 注入萤石云播放地址
-        // 只有当 Token 存在且未过期时，才返回播放地址
+        // 2. 🔥 [核心修复] 注入萤石云信息
+        // 只有当 Token 存在时才返回，否则前端无法播放
         if (project.getEzvizAccessToken() != null && project.getEzvizDeviceSerial() != null) {
-            // 简单判断过期 (为了演示稳健性)
-            if (project.getEzvizTokenExpireTime() != null && new Date().after(project.getEzvizTokenExpireTime())) {
-                // 如果过期了，这里应该触发刷新逻辑，但毕设演示暂不处理，或者手动点保存触发刷新
-                vo.setEzvizUrl("");
-            } else {
-                // 构造标准播放地址: ezopen://open.ys7.com/[验证码@][序列号]/[通道].live
-                String playUrl = "ezopen://open.ys7.com/";
-                if (project.getEzvizValidateCode() != null && !project.getEzvizValidateCode().isEmpty()) {
-                    playUrl += project.getEzvizValidateCode() + "@";
-                }
-                playUrl += project.getEzvizDeviceSerial() + "/1.live";
 
-                vo.setEzvizUrl(playUrl);
-                vo.setEzvizToken(project.getEzvizAccessToken());
+            // A. 检查 Token 是否过期 (简单的非空检查即可，过期了前端会报错，用户再点配置即可刷新)
+            vo.setEzvizToken(project.getEzvizAccessToken());
+
+            // B. 🔥 [必须加] 将序列号和验证码传给前端
+            // 如果不加这两行，前端刷新页面后 monitorData.serial 为空，initPlayer 就无法启动！
+            vo.setSerial(project.getEzvizDeviceSerial());
+            vo.setValidateCode(project.getEzvizValidateCode());
+
+            // C. 🔥 [修复URL拼接] 构造标准播放地址
+            // 正确格式：ezopen://[验证码]@open.ys7.com/[序列号]/1.live
+            // 之前你的代码把验证码放到了 open.ys7.com 后面，那是错的。
+            String playUrl = "";
+            if (project.getEzvizValidateCode() != null && !project.getEzvizValidateCode().isEmpty()) {
+                // 有验证码：ezopen://ABCDEF@open.ys7.com/...
+                playUrl = "ezopen://" + project.getEzvizValidateCode() + "@open.ys7.com/" + project.getEzvizDeviceSerial() + "/1.live";
+            } else {
+                // 无验证码：ezopen://open.ys7.com/...
+                playUrl = "ezopen://open.ys7.com/" + project.getEzvizDeviceSerial() + "/1.live";
             }
+            vo.setEzvizUrl(playUrl);
         }
 
-
-        // 1. --- 左侧：司空2同步监控 ---
+        // 3. --- 左侧：司空2同步监控 ---
         Long totalPhotos = projectPhotoMapper.selectCount(new QueryWrapper<ProjectPhoto>().eq("project_id", id));
         vo.setTotalPhotos(totalPhotos);
 
@@ -139,10 +137,10 @@ public class ProjectController {
             vo.setNextSyncTime("等待初始化");
         }
 
-        // 2. --- 右侧：日报监控 ---
+        // 4. --- 右侧：日报监控 ---
         vo.setReportEnabled(project.getEnableAiReport() != null && project.getEnableAiReport() == 1);
 
-        // 计算运行天数 (修复 getCreatedAt 调用)
+        // 计算运行天数
         if (project.getCreatedAt() != null) {
             long days = ChronoUnit.DAYS.between(
                     project.getCreatedAt().toLocalDate(),
@@ -162,33 +160,24 @@ public class ProjectController {
         SysUser creator = sysUserMapper.selectById(project.getCreatedBy());
         if (creator != null && creator.getReportTime() != null) {
             vo.setReceiverName(creator.getRealName() != null ? creator.getRealName() : creator.getUsername());
-
-            String reportTimeStr = creator.getReportTime();
-            LocalTime reportTime = LocalTime.parse(reportTimeStr, DateTimeFormatter.ofPattern("HH:mm"));
-            LocalDateTime now = LocalDateTime.now();
-            LocalDateTime nextRun = now.with(reportTime).withSecond(0);
-
-            if (now.isAfter(nextRun)) {
-                nextRun = nextRun.plusDays(1);
-            }
-
-            long hoursLeft = ChronoUnit.HOURS.between(now, nextRun);
-            long minutesLeft = ChronoUnit.MINUTES.between(now, nextRun) % 60;
-            vo.setNextReportTime(hoursLeft + "小时 " + minutesLeft + "分 后");
-
+            // 计算下次发送时间 (简化逻辑)
+            vo.setNextReportTime("每天 " + creator.getReportTime());
         } else {
             vo.setReceiverName("管理员");
             vo.setNextReportTime("未设置时间");
         }
 
-        // 3. --- 底部：日志流 ---
+        // 5. --- 底部：日志流 ---
         List<SysTaskLog> logs = sysTaskLogMapper.selectRecentLogs(id, 20);
         List<MonitorVo.LogItem> logItems = new ArrayList<>();
+
+        SimpleDateFormat timeSdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        timeSdf.setTimeZone(TimeZone.getTimeZone("Asia/Shanghai"));
 
         if (logs != null) {
             for (SysTaskLog log : logs) {
                 MonitorVo.LogItem item = new MonitorVo.LogItem();
-                item.setTime(timeSdf.format(log.getCreateTime())); // 使用修正后的带日期格式
+                item.setTime(timeSdf.format(log.getCreateTime()));
                 item.setMessage(log.getMessage());
 
                 if (log.getStatus() == 0) item.setType("ERROR");
@@ -304,8 +293,43 @@ public class ProjectController {
 
     @PutMapping("/{id}")
     public ApiResponse<Object> updateProject(@PathVariable Integer id, @RequestBody SysProject project) {
+        // 1. 🔥 [修正点] 使用 sysProjectMapper 查询旧数据，确保方法存在
+        // (您在 saveCameraConfig 里用过这个 sysProjectMapper.selectById，所以这里一定能用)
+        SysProject oldProject = sysProjectMapper.selectById(id);
+
+        if (oldProject == null) return ApiResponse.error("项目不存在");
+
+        // 2. 处理验证码：前端传空字符串 -> 强制转为 NULL
+        if (project.getEzvizValidateCode() != null && project.getEzvizValidateCode().trim().isEmpty()) {
+            project.setEzvizValidateCode(null);
+        }
+
+        // 3. 验证萤石云配置 (只有当 AppKey 和 Secret 都有值时)
+        String appKey = project.getEzvizAppKey();
+        String secret = project.getEzvizAppSecret();
+
+        if (appKey != null && !appKey.isEmpty() && secret != null && !secret.isEmpty()) {
+            try {
+                // 调用您的 EzvizService 获取 Token
+                // (注意：请确认 ezvizService 变量名是否正确注入)
+                String token = ezvizService.getAccessToken(appKey, secret);
+
+                // 更新 Token 和过期时间
+                project.setEzvizAccessToken(token);
+                Calendar cal = Calendar.getInstance();
+                cal.add(Calendar.DAY_OF_YEAR, 7);
+                project.setEzvizTokenExpireTime(cal.getTime());
+
+            } catch (Exception e) {
+                e.printStackTrace();
+                return ApiResponse.error("萤石云验证失败：请检查 AppKey 和 Secret 是否正确");
+            }
+        }
+
+        // 4. 设置 ID 并执行更新
         project.setId(id);
         boolean result = projectService.updateProjectInfo(project);
+
         return result ? ApiResponse.success("更新成功") : ApiResponse.error("更新失败");
     }
 
@@ -432,8 +456,10 @@ public class ProjectController {
         }
     }
 
+
     /**
      * [新增接口] 保存萤石云摄像头配置，并尝试自动获取 Token
+     * 🔥 已优化：只有当 Token 获取成功（验证通过）后，才保存配置到数据库
      */
     @PostMapping("/{projectId}/camera-config")
     public ApiResponse<Object> saveCameraConfig(@PathVariable Integer projectId, @RequestBody Map<String, String> body) {
@@ -443,39 +469,50 @@ public class ProjectController {
         String appKey = body.get("appKey");
         String secret = body.get("secret");
         String serial = body.get("serial");
-        String code = body.get("validateCode"); // 验证码
 
-        // 1. 更新基础配置
-        project.setEzvizAppKey(appKey);
-        project.setEzvizAppSecret(secret);
-        project.setEzvizDeviceSerial(serial);
-        project.setEzvizValidateCode(code);
+        // 🔥 [修改点 1] 获取验证码
+        String code = body.get("validateCode");
 
-        // 2. 如果填了 Key 和 Secret，尝试去萤石云拿 Token (实战核心！)
+        // 🔥 [修改点 2] 关键逻辑：如果前端传的是空字符串，强制转为 null
+        // 这样确保数据库里存的是 NULL，前端生成的 URL 就绝对不会带验证码，解决黑屏问题
+        if (code != null && code.trim().isEmpty()) {
+            code = null;
+        }
+
+        // 1. 先验证 Key 和 Secret 是否能换取 Token
+        String token = null;
+
         if (appKey != null && !appKey.isEmpty() && secret != null && !secret.isEmpty()) {
             try {
-                System.out.println(">>> 正在向萤石云申请 Token...");
-                String token = ezvizService.getAccessToken(appKey, secret);
-
-                // 获取成功，保存 Token 和过期时间 (简单起见，设为7天后过期)
-                project.setEzvizAccessToken(token);
-
-                Calendar cal = Calendar.getInstance();
-                cal.add(Calendar.DAY_OF_YEAR, 7); // 萤石云Token有效期默认7天
-                project.setEzvizTokenExpireTime(cal.getTime());
-
-                System.out.println(">>> 萤石云 Token 获取成功: " + token);
+                System.out.println(">>> 正在向萤石云申请 Token 以验证配置...");
+                // 这一步如果抛出异常，说明 Key/Secret 是错的
+                token = ezvizService.getAccessToken(appKey, secret);
+                System.out.println(">>> 验证通过，获取到 Token: " + token);
             } catch (Exception e) {
                 e.printStackTrace();
-                // 注意：这里我们捕获异常但不阻断保存，只是提示用户
-                // 但为了严谨，我们可以先把配置存进去，前端提示警告
-                sysProjectMapper.updateById(project);
-                return ApiResponse.error("配置保存成功，但连接萤石云失败: " + e.getMessage());
+                return ApiResponse.error("验证失败：无法连接萤石云，请检查 AppKey 和 Secret 是否正确");
             }
         }
 
-        // 3. 保存入库
+        // 2. 更新内存对象
+        project.setEzvizAppKey(appKey);
+        project.setEzvizAppSecret(secret);
+        project.setEzvizDeviceSerial(serial);
+
+        // 🔥 [修改点 3] 设置处理过的 code (可能是 null)
+        project.setEzvizValidateCode(code);
+
+        // 3. 更新 Token
+        if (token != null) {
+            project.setEzvizAccessToken(token);
+            Calendar cal = Calendar.getInstance();
+            cal.add(Calendar.DAY_OF_YEAR, 7); // 7天过期
+            project.setEzvizTokenExpireTime(cal.getTime());
+        }
+
+        // 4. 落库保存
         sysProjectMapper.updateById(project);
-        return ApiResponse.success("摄像头配置已保存，且连接测试通过！");
+
+        return ApiResponse.success("摄像头配置验证通过并保存成功！");
     }
 }
