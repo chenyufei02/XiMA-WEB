@@ -154,6 +154,15 @@
             gap: 15px;
         }
 
+        /* --- 🔥 大屏适配方案：内容限宽居中 --- */
+        .scroll-container > div {
+            /* 1. 限制最大宽度，建议 1600px - 1920px 之间 */
+            max-width: 1600px;
+
+            /* 2. 居中显示 */
+            margin-left: auto;
+            margin-right: auto;
+        }
         /* 内容滚动容器 */
         .scroll-container {
             flex: 1;
@@ -1155,6 +1164,19 @@
         },
         beforeDestroy() {
             if (this.monitorTimer) clearInterval(this.monitorTimer);
+            if (this.clockTimer) clearInterval(this.clockTimer);
+
+            // 🔥🔥🔥 [新增] 关键！页面关闭时，必须掐断视频流！
+            // 否则服务器会认为你还占着线，导致并发超限！
+            if (this.ezvizPlayer) {
+                try {
+                    this.ezvizPlayer.stop(); // 停止播放
+                    console.log("🛑 页面销毁，强制断开视频连接");
+                } catch (e) {
+                    // 忽略错误
+                }
+                this.ezvizPlayer = null;
+            }
         },
         methods: {
             // --- 🎬 新版时光机逻辑 ---
