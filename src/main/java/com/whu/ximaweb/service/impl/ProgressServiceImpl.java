@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.whu.ximaweb.dto.Coordinate;
 import com.whu.ximaweb.mapper.*;
 import com.whu.ximaweb.model.*;
+import com.whu.ximaweb.service.EmailService;
 import com.whu.ximaweb.service.ProgressService;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -58,6 +59,12 @@ public class ProgressServiceImpl implements ProgressService {
 
     @Autowired
     private BuildingFloorInfoMapper floorInfoMapper;
+
+    @Autowired
+    private EmailService emailService; // 注入邮件服务
+
+    @Autowired
+    private SysUserMapper sysUserMapper; // 注入用户查询服务
 
     @Override
     public void updateProgress(String key, int percent) {
@@ -325,8 +332,10 @@ public class ProgressServiceImpl implements ProgressService {
                                      actualHeight, finalH1, finalH2, avgDroneAlt, preciseFloor, isH2Measured, photoCount);
 
                 if (planName != null && !planName.isEmpty()) {
-                    analyzeAndSaveStatus(planName, LocalDate.parse(dateStr), preciseFloor);
+                    analyzeAndSaveStatus(projectId, projectName, buildingInfo.getName(), planName, LocalDate.parse(dateStr), preciseFloor);
                 }
+
+
             }
         }
         System.out.println(">>> 进度计算完成。");
@@ -415,10 +424,45 @@ public class ProgressServiceImpl implements ProgressService {
         else return Math.abs(diff) > 2 ? "严重滞后" : "滞后 " + Math.abs(diff) + " 层";
     }
 
-    private void analyzeAndSaveStatus(String planName, LocalDate date, int actualFloor) {
-        String status = analyzeStatus(planName, actualFloor, date);
-        // 这里可以扩展将状态存入数据库
-    }
+    private void analyzeAndSaveStatus(Integer projectId, String projectName, String buildingName, String planName, LocalDate date, int actualFloor) {
+            String status = analyzeStatus(planName, actualFloor, date);
+
+            // 【新增功能】事件驱动型：如果触发了滞后预警，立即主动发送报警邮件
+            if (status.contains("滞后")) {
+                try {
+                    // 查询项目创建者（即项目经理/管理员）
+                    SysProject project = sysProjectMapper.selectById(projectId);
+                    if (project != null && project.getCreatedBy() != null) {
+                        SysUser manager = sysUserMapper.selectById(project.getCreatedBy());
+                        if (manager != null && manager.getEmail() != null && !manager.getEmail().isEmpty()) {
+
+                            String subject = "【进度红绿灯报警】" + projectName + " 进度异常";
+                            String content = String.format(
+                                "尊敬的 %s：\n\n" +
+                                "系统在最新一次的无人机数据解算中，实时监测到您的项目出现进度异常，详情如下：\n\n" +
+                                "项目名称：%s\n" +
+                                "楼栋名称：%s\n" +
+                                "截止日期：%s\n" +
+                                "预警级别：%s\n" +
+                                "当前实际施工：%d 层\n\n" +
+                                "请尽快登录 XiMA 智能管控平台查看详细的三维进度偏差，并及时进行现场纠偏调度。\n\n" +
+                                "XiMA 智能管控平台 自动发送",
+                                manager.getRealName() != null ? manager.getRealName() : manager.getUsername(),
+                                projectName, buildingName, date.toString(), status, actualFloor
+                            );
+
+                            // 调用系统底层邮件组件发送
+                            emailService.sendSimpleMail(manager.getEmail(), subject, content);
+                            System.out.println("   [主动预警] 已向项目负责人发送进度滞后告警邮件: " + manager.getEmail());
+                        }
+                    }
+                } catch (Exception e) {
+                    System.err.println("   [主动预警] 发送滞后告警邮件失败: " + e.getMessage());
+                }
+            }
+
+            // 这里可以扩展将状态存入数据库
+        }
 
 
     /**
@@ -451,7 +495,7 @@ public class ProgressServiceImpl implements ProgressService {
             if (rawHeight < maxH) {
                 // 判断一下差距，如果是巨大的错误（比如差了50米），可能是测量事故，就不强制拉平了，保留错误供排查
                 // 但如果是小范围误差（比如差 3米以内），则强制拉平
-                if ((maxH - rawHeight) < 5.0) {
+                if ((maxH - rawHeight) < 3.0) {
                     System.out.println("   [修正] 检测到高度回撤: " + rawHeight + " -> 修正为历史最高: " + maxH);
                     finalHeight = maxH;
 
