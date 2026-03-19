@@ -40,4 +40,7 @@ public class PlanProgress {
 
     @TableField("ActualEnd")
     private LocalDateTime actualEnd;
+
+    @TableField("project_id")
+    private Integer projectId;
 }

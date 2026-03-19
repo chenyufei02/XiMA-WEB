@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  # 1. MySQL 数据库容器
+  mysql-db:
+    image: mysql:8.0
+    container_name: xima-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_DATABASE: ximalu
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./mysql-data:/var/lib/mysql
+
+  # 2. 你的 Java 后端项目容器
+  xima-web:
+    build: .
+    container_name: xima-web-app
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - TZ=Asia/Shanghai
+      # 下面这行极其重要：它会替换你代码里原本的 localhost，让项目去连上面那个叫 mysql-db 的容器
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql-db:3306/ximalu?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    depends_on:
+      - mysql-db

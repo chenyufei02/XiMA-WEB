@@ -321,6 +321,10 @@ public class ProgressController {
         // 3. 批量插入新数据
         for (PlanItem item : dto.getItems()) {
             PlanProgress p = new PlanProgress();
+
+            // 👇👇👇 核心修复：从 building 对象中提取 projectId 并赋值 👇👇👇
+            p.setProjectId(building.getProjectId());
+
             p.setBuildingName(modelName); // 存入模型名
             p.setFloor(String.valueOf(item.getFloor())); // 存入层号
 

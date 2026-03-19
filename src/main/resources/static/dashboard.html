@@ -493,13 +493,16 @@
 
         .ai-result-box {
             background: #f5f5f7;
-            padding: 15px;
+            padding: 25px; /* 增加内边距，让文字不拥挤 */
             border-radius: 8px;
-            line-height: 1.6;
+            line-height: 1.8; /* 增大行高，提升报告的阅读质感 */
             color: #333;
-            max-height: 300px;
+            max-height: 70vh; /* 👑 核心修复：高度随着屏幕等比例放大，不再是憋屈的 300px */
             overflow-y: auto;
-            white-space: pre-wrap; /* 保留换行 */
+            white-space: pre-wrap;
+            font-size: 15px; /* 字体稍微放大一点点 */
+            border: 1px solid #e1e1e8;
+            box-shadow: inset 0 2px 10px rgba(0,0,0,0.02); /* 加一点内阴影提升高级感 */
         }
 
         /* 🔥 [新增] 视频配置按钮样式 */
@@ -710,7 +713,7 @@
         <span>AI 分析</span>
     </div>
 
-    <el-dialog title="AI 智能项目分析" :visible.sync="showAiDialog" width="500px">
+    <el-dialog title="AI 智能项目分析" :visible.sync="showAiDialog" width="1500px">
         <div v-loading="aiLoading" element-loading-text="Kimi 正在思考中...">
             <div v-if="!aiResult" class="ai-empty">
                 <p>点击下方按钮，让 AI 为您分析当前项目进度的风险与建议。</p>

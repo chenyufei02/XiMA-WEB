@@ -1,21 +1,22 @@
-package com.whu.ximaweb.task; // 🔥 修正包名
+package com.whu.ximaweb.task;
 
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper; // 🔥 引入 MP 查询构造器
-import com.whu.ximaweb.mapper.SysProjectMapper; // 🔥 修正 Mapper 路径
-import com.whu.ximaweb.model.SysProject;       // 🔥 修正实体类路径
-import com.whu.ximaweb.service.EzvizService;   // 🔥 修正 Service 路径
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.whu.ximaweb.mapper.SysProjectMapper;
+import com.whu.ximaweb.model.SysProject;
+import com.whu.ximaweb.service.EzvizService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import javax.annotation.PostConstruct; // 🔥 关键新增 1：引入 PostConstruct 注解
 import java.util.Calendar;
 import java.util.List;
 
 /**
  * 萤石云 Token 自动刷新定时任务
- * 生产环境必备：每天凌晨自动续期，防止监控黑屏
+ * 包含：开机自启校验 + 每天凌晨自动续期
  */
 @Component
 public class EzvizTokenTask {
@@ -29,6 +30,16 @@ public class EzvizTokenTask {
     private EzvizService ezvizService;
 
     /**
+     * 🔥 [关键新增 2] 开机自启机制：项目每次启动时，强制执行一次 Token 刷新
+     * 解决开发阶段/服务器重启后，未到凌晨2点导致 Token 过期黑屏的问题
+     */
+    @PostConstruct
+    public void initTokenOnStartup() {
+        log.info("🚀 [系统启动] 触发萤石云 Token 开机自检与自动刷新...");
+        refreshTokenTask();
+    }
+
+    /**
      * 定时策略：每天凌晨 02:00 执行一次
      */
     @Scheduled(cron = "0 0 2 * * ?")
@@ -37,9 +48,7 @@ public class EzvizTokenTask {
 
         try {
             // 1. 查出所有配置了萤石云 AppKey 的项目
-            // 使用 MyBatis-Plus 的 QueryWrapper
             QueryWrapper<SysProject> query = new QueryWrapper<>();
-            // 注意：MyBatis-Plus 默认将驼峰字段转为下划线列名，所以这里用 "ezviz_app_key"
             query.isNotNull("ezviz_app_key").ne("ezviz_app_key", "");
 
             List<SysProject> projectList = sysProjectMapper.selectList(query);
@@ -74,7 +83,7 @@ public class EzvizTokenTask {
                     cal.add(Calendar.DAY_OF_YEAR, 7);
                     project.setEzvizTokenExpireTime(cal.getTime());
 
-                    // 5. 更新数据库 (使用 BaseMapper 的 updateById)
+                    // 5. 更新数据库
                     sysProjectMapper.updateById(project);
 
                     successCount++;

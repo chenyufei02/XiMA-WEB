@@ -19,12 +19,18 @@ public class WebConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         // 注册 JWT 拦截器
         registry.addInterceptor(jwtInterceptor)
-                .addPathPatterns("/api/**") // 拦截所有 /api 开头的接口
-                .excludePathPatterns(
-                        "/api/auth/login",    // 排除登录接口
-                        "/api/auth/register", // 排除注册接口
-                        "/api/auth/send-code", // 排除发送验证码接口
-                        "/api/hello"          // 排除测试接口
-                );
+        .addPathPatterns("/api/**") // 拦截所有 /api 开头的接口\
+
+        .excludePathPatterns(
+            "/api/auth/login",    // 排除登录接口
+            "/api/auth/register", // 排除注册接口
+            "/api/auth/send-code", // 排除发送验证码接口
+            "/api/hello" ,         // 排除测试接口
+            "/v3/api-docs/**",
+            "/swagger-ui/**",
+            "/swagger-ui.html",
+            "/swagger-resources/**",
+            "/webjars/**"
+        );
     }
 }
