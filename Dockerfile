@@ -1,7 +1,10 @@
 # 1. 使用包含 Java 21 环境的轻量级基础镜像
 FROM eclipse-temurin:21-jre-alpine
 
-# 2. 设定系统时区为上海（极其重要，防止你的监控日志和日报时间错乱）
+# 【重点！新增了这一行】：把国外的下载源替换为阿里云国内源，速度起飞！
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
+
+# 2. 设定系统时区为上海
 RUN apk add --no-cache tzdata && \
     cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
     echo "Asia/Shanghai" > /etc/timezone
@@ -15,5 +18,5 @@ COPY target/*.jar app.jar
 # 5. 声明你的后端服务使用的是 8080 端口
 EXPOSE 8080
 
-# 6. 容器启动时执行的命令（相当于在黑框框里敲 java -jar 运行程序）
+# 6. 容器启动时执行的命令
 ENTRYPOINT ["java", "-jar", "app.jar"]
