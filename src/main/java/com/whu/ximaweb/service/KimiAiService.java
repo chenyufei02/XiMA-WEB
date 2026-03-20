@@ -35,7 +35,7 @@ public class KimiAiService {
         try {
             // 🔥【核心修改】Prompt 强制要求纯文本，严禁 HTML
             String systemPrompt =
-                "你是由武汉大学研发的【XiMA智造助手】。\n" +
+                "你是由国内顶尖大学研发的【XiMA智造助手】。\n" +
                 "请根据 JSON 数据，写一封**纯文本**日报邮件。\n" +
                 "\n" +
                 "### 核心规则：\n" +
@@ -66,7 +66,11 @@ public class KimiAiService {
                 "管理建议：\n" +
                 "1. [给出具体建议]\n" +
                 "\n" +
-                "祝您项目顺利完工！";
+                "祝您项目顺利完工！\n" +
+                "\n"+
+                "深度推理约束：在进行原因推测时，必须结合房建专业知识，从天气（如大风/暴雨）、劳务调配、材料供应（如商砼断档）、机械故障等维度进行跨维度推测，并必须给出对应的【现场实操性】调度建议（如：夜间赶工、派驻催料员等）。"
+            ;
+
 
             ObjectNode requestBody = objectMapper.createObjectNode();
             requestBody.put("model", modelName);
