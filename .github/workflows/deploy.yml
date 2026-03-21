@@ -1,0 +1,52 @@
+name: Deploy to Aliyun ECS Docker
+
+# 触发条件：当代码推送到 main 分支时自动执行 (如果你的主分支叫 master，请把 main 改成 master)
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 1. 检出 GitHub 仓库的最新代码
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    # 2. 配置 Java 环境 (这里默认用 Java 8，如果你用的是 Java 17 或 21，请把 java-version 改掉)
+    - name: Set up JDK
+      uses: actions/setup-java@v3
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+
+    # 3. 使用 Maven 打包项目 (这一步会在 GitHub 的云端服务器上生成 target 文件夹)
+    - name: Build with Maven
+      run: mvn clean package -DskipTests
+
+    # 4. 将打包好的 target 文件夹通过 SCP 传送到阿里云服务器
+    - name: SCP Files to Aliyun
+      uses: appleboy/scp-action@master
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USER }}
+        password: ${{ secrets.SERVER_PASSWORD }}
+        source: "target/"
+        # 目标路径：对应你云服务器上的目录
+        target: "/root/xima-deploy/"
+        strip_components: 0
+
+    # 5. 通过 SSH 登录阿里云服务器，执行 Docker 重启命令
+    - name: SSH and Restart Docker
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USER }}
+        password: ${{ secrets.SERVER_PASSWORD }}
+        script: |
+          cd /root/xima-deploy
+          # 停止并移除旧容器
+          docker-compose down
+          # 强制重新构建镜像并后台启动新容器
+          docker-compose up -d --build
