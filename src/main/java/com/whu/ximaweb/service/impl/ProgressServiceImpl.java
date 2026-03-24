@@ -237,7 +237,7 @@ public class ProgressServiceImpl implements ProgressService {
                 for (RawData d : allCandidates) {
                     if (d.dist <= dMin + 5.0) {
                         h1List.add(d);
-                    } else if (d.dist >= dMin + 10.0) {
+                    } else if (d.dist > dMin + 5.0) {
                         h2List.add(d);
                     }
                 }
