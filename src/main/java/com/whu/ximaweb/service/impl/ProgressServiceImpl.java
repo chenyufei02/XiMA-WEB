@@ -30,6 +30,7 @@ import java.util.stream.Collectors;
  * 2. 施工进度智能计算算法 (V12新算法：混合清洗[中位数/P25] -> 距离分层 -> 均值迭代 -> H2智能校验 -> 棘轮修正)
  * 3. Navisworks 状态分析与楼层换算 (保留原业务)
  */
+@SuppressWarnings("ALL")
 @Service
 public class ProgressServiceImpl implements ProgressService {
 
@@ -130,7 +131,8 @@ public class ProgressServiceImpl implements ProgressService {
 
             List<Coordinate> fence;
             try {
-                fence = objectMapper.readValue(boundaryJson, new TypeReference<List<Coordinate>>() {});
+                fence = objectMapper.readValue(boundaryJson, new TypeReference<>() {
+                });
             } catch (Exception e) { continue; }
             if (fence.size() < 3) continue;
 
@@ -188,7 +190,7 @@ public class ProgressServiceImpl implements ProgressService {
                 if (photoCount > 0) {
                     // 1. 提取所有距离并排序
                     List<Double> distances = allCandidates.stream()
-                            .map(d -> d.dist).sorted().collect(Collectors.toList());
+                            .map(d -> d.dist).sorted().toList();
 
                     double benchmark;
 
@@ -494,8 +496,8 @@ public class ProgressServiceImpl implements ProgressService {
             // 如果今天算出来的高度，比历史最高还低
             if (rawHeight < maxH) {
                 // 判断一下差距，如果是巨大的错误（比如差了50米），可能是测量事故，就不强制拉平了，保留错误供排查
-                // 但如果是小范围误差（比如差 3米以内），则强制拉平
-                if ((maxH - rawHeight) < 3.0) {
+                // 但如果是小范围误差（比如差 1米以内），则强制拉平
+                if ((maxH - rawHeight) < 1.0) {
                     System.out.println("   [修正] 检测到高度回撤: " + rawHeight + " -> 修正为历史最高: " + maxH);
                     finalHeight = maxH;
 
