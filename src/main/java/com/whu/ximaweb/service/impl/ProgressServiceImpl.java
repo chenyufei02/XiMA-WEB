@@ -296,9 +296,9 @@ public class ProgressServiceImpl implements ProgressService {
                 boolean isH2Measured = false;
 
                 if (measuredH2 != -1) {
-                    // 如果有历史数据，且 实测H2 远小于 理论H2 (差距 > 10m)
+                    // 如果有历史数据，且 实测H2 远小于 理论H2 (差距 > 2m)
                     // 说明：实测到的距离太短了，打到了裙楼或别的楼顶，不是真地面
-                    if (theoreticalH2 != -1 && (theoreticalH2 - measuredH2) > 10.0) {
+                    if (theoreticalH2 != -1 && (theoreticalH2 - measuredH2) > 2.0) {
                         System.out.println("   [警告] 剔除伪地面数据(串扰/裙楼)! 实测H2=" + measuredH2 + " 理论H2=" + theoreticalH2);
                         // 强制使用理论值
                         finalH2 = theoreticalH2;
