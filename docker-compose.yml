@@ -7,12 +7,16 @@ services:
     container_name: xima-mysql
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: 123456
+      # 设置 root 用户的密码
+      MYSQL_ROOT_PASSWORD: daiyujie555
       MYSQL_DATABASE: ximalu
       TZ: Asia/Shanghai
     ports:
-      - "3306:3306"
+      # 【防黑客关键】把外网暴露的端口改为 33306，映射到容器内的 3306
+      # 你的外部插件以后连接时，需使用服务器公网 IP + 33306 端口
+      - "33306:3306"
     volumes:
+      # 重新映射干净的数据卷
       - ./mysql-data:/var/lib/mysql
 
   # 2. 你的 Java 后端项目容器
@@ -24,7 +28,10 @@ services:
       - "8080:8080"
     environment:
       - TZ=Asia/Shanghai
-      # 下面这行极其重要：它会替换你代码里原本的 localhost，让项目去连上面那个叫 mysql-db 的容器
+      # Java 后端和 MySQL 在同一个 Docker 网络，不用改端口，继续用 mysql-db:3306
       - SPRING_DATASOURCE_URL=jdbc:mysql://mysql-db:3306/ximalu?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=root
+      # 【必须同步修改】密码更新为新的密码
+      - SPRING_DATASOURCE_PASSWORD=daiyujie555
     depends_on:
       - mysql-db
