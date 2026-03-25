@@ -31,3 +31,6 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# 忽略生产环境的真实密码配置文件
+application-prod.properties
