@@ -285,6 +285,41 @@
         /* 4. 修复表格全透明及鼠标悬停发黑的问题 */
         .el-table, .el-table th, .el-table tr, .el-table td { background-color: #ffffff !important; color: #303133 !important; border-color: #ebeef5 !important; }
         .el-table--enable-row-hover .el-table__body tr:hover > td { background-color: #f5f7fa !important; }
+
+        /* ==========================================
+           🖨️ 补充精细化补丁：修复 Logo 隐身与标题栏高度
+           ========================================== */
+        /* 1. 彻底修复侧边栏顶部 "XiMA 智造" 隐身问题：强制深色文字，加高加粗，与看板页对齐 */
+        .logo-area {
+            min-height: 75px !important; /* 强制增加高度，显得更大气 */
+            height: auto !important;
+            padding: 0 15px !important;
+            background: #ffffff !important;
+            color: #303133 !important;   /* 强制把白色文字改成深黑！隐身问题解决！ */
+            font-size: 22px !important;
+            font-weight: 900 !important;
+            border-bottom: 1px solid #ebeef5 !important;
+            letter-spacing: 1px !important;
+        }
+        .logo-area i {
+            color: #7367f0 !important;   /* 确保图标是漂亮的紫色 */
+        }
+
+        /* 2. 统一正上方标题栏的高度和质感，完全复刻数据看板页的尺寸 */
+        .header-bar {
+            min-height: 75px !important; /* 同步增加高度 */
+            padding: 0 40px !important;  /* 增加左右边距，不再显得干瘪 */
+            background: linear-gradient(90deg, #ffffff, #f0f2f5) !important;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.03) !important;
+            border-bottom: none !important;
+        }
+
+        /* 3. 强化面包屑导航中项目名称药丸标签的质感 */
+        .page-title span {
+            background: #f0f2f5 !important;
+            border-color: #e4e7ed !important;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.02) !important;
+        }
     </style>
 </head>
 <body>
