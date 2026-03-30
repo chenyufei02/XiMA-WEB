@@ -8,18 +8,20 @@
         /* =========================================================
            1. 全局深色主题变量定义 (保持原样)
            ========================================================= */
-        :root {
-            --bg-color: #1e1e2d;
-            --sidebar-bg: #151521;
-            --card-bg: #2b2b40;
-            --text-primary: #e1e1e6;
-            --text-secondary: #a2a2b8;
-            --accent-purple: #7367f0;
-            --accent-blue: #00cfe8;
-            --accent-green: #28c76f;
-            --accent-red: #ea5455;
-            --border-color: rgba(255,255,255,0.08);
-        }
+            :root {
+                --bg-color: #f4f5f7;
+                --sidebar-bg: #ffffff;
+                --card-bg: #ffffff;
+                --text-primary: #303133;
+                --text-secondary: #606266;
+                --text-muted: #909399;
+                --accent-purple: #7367f0;
+                --accent-blue: #00cfe8;
+                --accent-green: #28c76f;
+                --accent-red: #ea5455;
+                --border-color: #ebeef5;
+                --hover-bg: #f2f6fc;
+            }
 
         body {
             margin: 0;
@@ -294,6 +296,33 @@
             stroke-width: 2 !important;
             fill-opacity: 0.3 !important;
         }
+
+
+
+
+/* ==========================================
+           🖨️ 最终精细化补丁：电子围栏 (boundary.html)
+           ========================================== */
+        /* 1. 主背景与顶部渐变标题栏 */
+        .main, #canvas-container { background: #f4f5f7 !important; }
+        .toolbar { background: linear-gradient(90deg, #ffffff, #f0f2f5) !important; box-shadow: 0 2px 8px rgba(0,0,0,0.03) !important; border-bottom: none !important;}
+        .sidebar, .sidebar-header, #photo-list { background: #ffffff !important; }
+
+        /* 2. 侧边栏：修复标题底色与按钮轮廓 */
+        .project-title-area { background: rgba(0, 207, 232, 0.05) !important; color: #303133 !important; }
+        .nav-item { background-color: #f8f9fa !important; border: 1px solid #ebeef5 !important; color: #606266 !important; }
+        .nav-item.active { background: #f0f9ff !important; color: #00cfe8 !important; border-color: #00cfe8 !important; }
+        .nav-item:hover { background-color: #ffffff !important; color: #00cfe8 !important; box-shadow: 0 2px 8px rgba(0,207,232,0.1) !important;}
+
+        /* 3. 修复纯黑色的下拉筛选框 */
+        #folderSelect { background: #ffffff !important; color: #303133 !important; border: 1px solid #dcdfe6 !important; font-weight: bold !important; }
+
+        /* 4. 修复输入框、弹窗和文字颜色 */
+        .input-group, .photo-name, .el-dialog__title { color: #303133 !important; font-weight: bold !important; }
+        .photo-item { background: #ffffff !important; border-color: #ebeef5 !important; }
+        .photo-item:hover { background: #f0f9ff !important; border-color: #00cfe8 !important; }
+        .el-input__inner, .el-select-dropdown { background-color: #ffffff !important; border-color: #dcdfe6 !important; color: #303133 !important; font-weight: bold !important;}
+        .el-dialog { background-color: #ffffff !important; }
     </style>
 </head>
 <body>
@@ -308,7 +337,7 @@
 
         <div>
             <label style="font-size:12px; color:var(--text-secondary); display:block; margin-bottom:8px;">📂 任务文件夹筛选：</label>
-            <select id="folderSelect" style="width:100%; padding:8px; background:#151521; color:white; border:1px solid rgba(255,255,255,0.1); border-radius:4px; outline:none;" onchange="filterPhotosByFolder()">
+            <select id="folderSelect" style="width:100%; padding:8px; background:#ffffff; color:#303133; border:1px solid #dcdfe6; border-radius:4px; outline:none; font-weight: bold;" onchange="filterPhotosByFolder()">
                 <option value="all">加载中...</option>
             </select>
         </div>

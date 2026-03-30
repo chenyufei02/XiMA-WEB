@@ -7,15 +7,24 @@
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <style>
         /* --- 1. 全局变量 --- */
+        /* --- 1. 全局变量与基础样式 (浅色打印模式) --- */
         :root {
-            --bg-color: #1e1e2d;
-            --sidebar-bg: #151521;
-            --card-bg: #2b2b40;
-            --text-primary: #e1e1e6;
-            --text-secondary: #a2a2b8;
-            --accent-purple: #7367f0;
+            --bg-color: #f4f5f7;           /* 整体背景改为浅灰白色 */
+            --sidebar-bg: #ffffff;         /* 侧边栏改为纯白 */
+            --card-bg: #ffffff;            /* 卡片背景改为纯白 */
+            --text-primary: #303133;       /* 主要文字改为深黑色，保证打印清晰 */
+            --text-secondary: #606266;     /* 次要文字改为深灰色 */
+            --text-muted: #909399;         /* 弱化文字改为中灰色 */
+            --accent-purple: #7367f0;      /* 保持主题色不变，彩印依然好看 */
             --accent-blue: #00cfe8;
-            --border-color: rgba(255,255,255,0.08);
+            --accent-green: #28c76f;
+            --accent-red: #ea5455;
+            --accent-yellow: #ff9f43;
+            --border-color: #ebeef5;       /* 边框改为浅灰色，告别透明边框 */
+            --header-height: 70px;
+            --sidebar-width: 240px;
+            --transition-speed: 0.3s;
+            --hover-bg: #f2f6fc;           /* 悬浮背景色改为极浅蓝灰 */
         }
 
         /* --- 2. 核心布局 (使用绝对定位撑满全屏) --- */
@@ -189,7 +198,7 @@
             if (this.token && !this.token.startsWith('Bearer ')) this.token = 'Bearer ' + this.token;
 
             this.$nextTick(() => {
-                this.chartInstance = echarts.init(document.getElementById('mainChart'), 'dark', {renderer: 'canvas'});
+                this.chartInstance = echarts.init(document.getElementById('mainChart'), null, {renderer: 'canvas'});
                 window.addEventListener('resize', () => {
                     this.chartInstance && this.chartInstance.resize();
                 });
@@ -252,14 +261,14 @@
                         boundaryGap: false,
                         data: dates,
                         axisLine: { lineStyle: { color: 'rgba(255,255,255,0.3)' } },
-                        axisLabel: { color: '#a2a2b8' }
+                        axisLabel: { color: '#666' }
                     },
                     yAxis: {
                         type: 'value',
                         name: title,
                         nameTextStyle: { color: '#fff', padding: [0, 0, 0, 20] },
-                        splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } },
-                        axisLabel: { color: '#a2a2b8' }
+                        splitLine: { lineStyle: { color: '#eee' } },
+                        axisLabel: { color: '#666' }
                     },
                     series: [{
                         name: title,

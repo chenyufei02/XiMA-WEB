@@ -9,41 +9,32 @@
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <script src="ezuikit.js"></script>
     <style>
-        /* --- 1. 全局变量与基础样式 --- */
+        /* --- 1. 全局变量与基础样式 (浅色打印模式) --- */
         :root {
-            --bg-color: #1e1e2d;
-            --sidebar-bg: #151521;
-            --card-bg: #2b2b40;
-            --text-primary: #e1e1e6;
-            --text-secondary: #a2a2b8;
-            --text-muted: #6c6c80;
+            --bg-color: #f4f5f7;
+            --sidebar-bg: #ffffff;
+            --card-bg: #ffffff;
+            --text-primary: #303133;
+            --text-secondary: #606266;
+            --text-muted: #909399;
             --accent-purple: #7367f0;
             --accent-blue: #00cfe8;
             --accent-green: #28c76f;
             --accent-red: #ea5455;
             --accent-yellow: #ff9f43;
-            --border-color: rgba(255,255,255,0.08);
+            --border-color: #dcdfe6;
             --header-height: 70px;
             --sidebar-width: 240px;
             --transition-speed: 0.3s;
         }
 
         body, html {
-            margin: 0;
-            padding: 0;
-            height: 100%;
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-primary);
-            overflow: hidden;
-            -webkit-font-smoothing: antialiased;
+            margin: 0; padding: 0; height: 100%; font-family: 'Segoe UI', sans-serif;
+            background-color: var(--bg-color); color: var(--text-primary); overflow: hidden;
         }
 
-        #app {
-            display: flex;
-            height: 100vh;
-            width: 100vw;
-        }
+        #app { display: flex; height: 100vh; width: 100vw; }
+
 
         /* --- 2. 侧边栏样式 (SideBar) --- */
         .sidebar {
@@ -102,6 +93,8 @@
             font-weight: 500;
             transition: all 0.2s ease-in-out;
             border-left: 3px solid transparent;
+            background-color: #f8f9fa;      /* 增加极浅的灰色底，形成按钮形状 */
+            border: 1px solid #ebeef5;      /* 增加极浅的边框，凸显轮廓 */
         }
 
         .nav-item:hover {
@@ -142,7 +135,7 @@
             align-items: center;
             justify-content: space-between;
             padding: 0 40px;
-            background: rgba(30, 30, 45, 0.95);
+            background: rgba(255, 255, 255, 0.95);
             border-bottom: 1px solid var(--border-color);
             backdrop-filter: blur(10px);
             z-index: 50;
@@ -173,7 +166,7 @@
 
         /* 🔥 [新增] 自动化监控驾驶舱样式 */
         .monitor-dashboard {
-            background: #232333; border: 1px solid #3b3b4f; border-radius: 16px;
+            background: #ffffff; border: 1px solid #3b3b4f; border-radius: 16px;
             margin-bottom: 35px; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,0.3);
         }
         .monitor-header {
@@ -230,7 +223,7 @@
         .countdown-val { font-size: 14px; color: var(--accent-yellow); font-weight: bold; }
 
         .log-terminal {
-            background: #101015; padding: 15px; border-top: 1px solid var(--border-color);
+            background: #303133; padding: 15px; border-top: 1px solid var(--border-color);
             font-family: 'Consolas', monospace; font-size: 12px; color: #ccc;
             height: 120px; overflow-y: auto;
         }
@@ -539,7 +532,7 @@
         /* 左侧：数据仪表盘 */
         .tm-left-panel {
             width: 320px; /* 固定宽度 */
-            background: rgba(30, 30, 40, 0.9);
+            background: #ffffff;
             border-right: 1px solid #3b3b4f;
             padding: 25px;
             display: flex;
@@ -677,6 +670,28 @@
             filter: drop-shadow(0 2px 5px rgba(0,0,0,0.8)); /* 加个阴影，防止背景太白看不清 */
         }
 
+
+
+/* ==========================================
+           🖨️ 最终精细化补丁：数据看板 (dashboard.html)
+           ========================================== */
+        /* 1. 主背景与顶部渐变标题栏 */
+        .main-content { background: #f4f5f7 !important; }
+        .header { background: linear-gradient(90deg, #ffffff, #f0f2f5) !important; border-bottom: none !important; box-shadow: 0 2px 8px rgba(0,0,0,0.03) !important; }
+
+        /* 2. 侧边栏：修复灰色标题底色与按钮轮廓 */
+        .project-title-area { background: rgba(0, 207, 232, 0.05) !important; color: #303133 !important; }
+        .nav-item { background-color: #f8f9fa !important; border: 1px solid #ebeef5 !important; color: #606266 !important; }
+        .nav-item.active { background: #f0f9ff !important; color: #00cfe8 !important; border-color: #00cfe8 !important; }
+        .nav-item:hover { background-color: #ffffff !important; color: #00cfe8 !important; box-shadow: 0 2px 8px rgba(0,207,232,0.1) !important; }
+
+        /* 3. 监控卡片去灰提亮 */
+        .monitor-dashboard, .monitor-panel { background: #ffffff !important; border: 1px solid #e4e7ed !important; }
+        .monitor-header, .b-header { background: #f0f2f5 !important; border-bottom: 1px solid #ebeef5 !important;}
+        .monitor-title, .panel-title, .stat-info h3, .b-title, .chart-title { color: #303133 !important; }
+        .metric-value, .tm-value { color: #303133 !important; font-weight: 900 !important; }
+        .metric-label, .countdown-val, .tm-label { color: #606266 !important; font-weight: bold !important; }
+        .log-terminal, .countdown-box { background: #f8f9fa !important; color: #303133 !important; border: 1px solid #ebeef5 !important;}
     </style>
 </head>
 
@@ -1605,14 +1620,18 @@
                     if (!b.dates || b.dates.length === 0) return;
 
                     const commonGrid = { top: 35, bottom: 25, left: 40, right: 15, containLabel: true };
-                    const xAxis = { type: 'category', data: b.dates, axisLine: { lineStyle: { color: '#555' } }, axisLabel: { color: '#888' } };
-                    const yAxis = { type: 'value', splitLine: { lineStyle: { color: '#333', type: 'dashed' } }, axisLabel: { color: '#888' } };
+                    // const xAxis = { type: 'category', data: b.dates, axisLine: { lineStyle: { color: '#555' } }, axisLabel: { color: '#888' } };
+                    // const yAxis = { type: 'value', splitLine: { lineStyle: { color: '#333', type: 'dashed' } }, axisLabel: { color: '#888' } };
+
+                    // 修改为适合打印的颜色:
+                    const xAxis = { type: 'category', data: b.dates, axisLine: { lineStyle: { color: '#999' } }, axisLabel: { color: '#333' } };
+                    const yAxis = { type: 'value', splitLine: { lineStyle: { color: '#ddd', type: 'dashed' } }, axisLabel: { color: '#333' } };
 
                     // Chart 1: 趋势
                     const chartTrend = echarts.init(document.getElementById('chart-trend-' + index));
                     chartTrend.setOption({
                         tooltip: { trigger: 'axis' },
-                        legend: { data: ['计划', '实际'], textStyle: { color: '#a2a2b8' }, bottom: 0, icon: 'circle' },
+                        legend: { data: ['计划', '实际'], textStyle: { color: '#333' }, bottom: 0, icon: 'circle' },
                         grid: commonGrid,
                         xAxis: xAxis,
                         yAxis: yAxis,
