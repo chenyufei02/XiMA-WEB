@@ -292,8 +292,8 @@
 <div id="app">
     <div class="sidebar">
         <template v-if="isProjectMode">
-            <div class="project-title-area" :title="projectName">
-                <i class="el-icon-office-building"></i> {{ projectName || '加载中...' }}
+            <div class="logo-area" @click="goHome">
+                <i class="el-icon-monitor"></i> XiMA 智造
             </div>
             <div class="nav-menu">
                 <div class="nav-item" @click="goToPage('dashboard.html')">
@@ -339,6 +339,9 @@
         <div class="header-bar">
             <div class="page-title">
                 <i class="el-icon-date"></i> 施工计划配置
+                <span v-if="projectName" style="margin-left: 20px; font-size: 13px; font-weight: bold; color: #606266; background: #f4f5f7; padding: 4px 12px; border-radius: 15px; border: 1px solid #dcdfe6; letter-spacing: normal;">
+                    当前项目：{{ projectName }}
+                </span>
             </div>
             <div style="display: flex; gap: 10px;">
                 <el-button

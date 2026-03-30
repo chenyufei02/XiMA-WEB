@@ -672,7 +672,7 @@
 
 
 
-/* ==========================================
+        /* ==========================================
            🖨️ 最终精细化补丁：数据看板 (dashboard.html)
            ========================================== */
         /* 1. 主背景与顶部渐变标题栏 */
@@ -692,15 +692,17 @@
         .metric-value, .tm-value { color: #303133 !important; font-weight: 900 !important; }
         .metric-label, .countdown-val, .tm-label { color: #606266 !important; font-weight: bold !important; }
         .log-terminal, .countdown-box { background: #f8f9fa !important; color: #303133 !important; border: 1px solid #ebeef5 !important;}
+
+        .logo-area { height: var(--header-height); display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 900; color: #303133; background: #ffffff; border-bottom: 1px solid #ebeef5; cursor: pointer; letter-spacing: 1px; }
+        .logo-area i { color: #7367f0; margin-right: 10px; font-size: 24px; }
     </style>
 </head>
 
 <body>
 <div id="app">
     <div class="sidebar">
-        <div class="project-title-area" :title="dashboardData.projectName">
-            <i class="el-icon-office-building"></i>
-            <span>{{ dashboardData.projectName || '正在加载...' }}</span>
+        <div class="logo-area" @click="goHome">
+            <i class="el-icon-monitor"></i> XiMA 智造
         </div>
 
         <div class="nav-menu">
@@ -749,7 +751,12 @@
 
     <div class="main-content">
         <div class="header">
-            <div style="flex:1"></div>
+            <div style="flex:1; display: flex; align-items: center;">
+                <span style="font-size: 14px; font-weight: bold; color: #303133; background: #f0f2f5; padding: 6px 15px; border-radius: 20px; border: 1px solid #dcdfe6;">
+                    <i class="el-icon-office-building" style="color: var(--accent-blue); margin-right: 5px;"></i>
+                    当前项目：{{ dashboardData.projectName || '正在加载...' }}
+                </span>
+            </div>
 
             <div class="header-controls" style="display: flex; align-items: center; gap: 10px;">
                 <el-button
