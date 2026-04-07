@@ -141,7 +141,7 @@ public class ProgressServiceImpl implements ProgressService {
                 double lng = (photo.getLrfTargetLng() != null) ? photo.getLrfTargetLng().doubleValue() : photo.getGpsLng().doubleValue();
 
                 // 缓冲区判定 (保持你原来的25.0米)
-                if (isInsideOrBuffered(lat, lng, fence, 20.0)) {
+                if (isInsideOrBuffered(lat, lng, fence, 10.0)) {
                     String dateStr = photo.getShootTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
 
                     RawData data = new RawData();
@@ -204,7 +204,7 @@ public class ProgressServiceImpl implements ProgressService {
                         }
                     } else {
                         // 大样本 -> 使用【P25 分位数】 (防止地面点干扰)
-                        int p25Index = (int) Math.ceil(photoCount * 0.25) - 1;
+                        int p25Index = (int) Math.floor(photoCount * 0.25);
                         if (p25Index < 0) p25Index = 0;
                         benchmark = distances.get(p25Index);
                     }
@@ -334,7 +334,7 @@ public class ProgressServiceImpl implements ProgressService {
                                      actualHeight, finalH1, finalH2, avgDroneAlt, preciseFloor, isH2Measured, photoCount);
 
                 if (planName != null && !planName.isEmpty()) {
-                    analyzeAndSaveStatus(projectId, projectName, buildingInfo.getName(), planName, LocalDate.parse(dateStr), preciseFloor);
+                    analyzeAndSaveStatus(projectId, projectName, buildingId,buildingInfo.getName(), planName, LocalDate.parse(dateStr), preciseFloor);
                 }
 
 
@@ -426,46 +426,59 @@ public class ProgressServiceImpl implements ProgressService {
         else return Math.abs(diff) > 2 ? "严重滞后" : "滞后 " + Math.abs(diff) + " 层";
     }
 
-    private void analyzeAndSaveStatus(Integer projectId, String projectName, String buildingName, String planName, LocalDate date, int actualFloor) {
+    private void analyzeAndSaveStatus(Integer projectId, String projectName, Integer buildingId, String buildingName, String planName, LocalDate date, int actualFloor) {
             String status = analyzeStatus(planName, actualFloor, date);
 
-            // 【新增功能】事件驱动型：如果触发了滞后预警，立即主动发送报警邮件
+            // 仅在进度滞后时触发
             if (status.contains("滞后")) {
-                try {
-                    // 查询项目创建者（即项目经理/管理员）
-                    SysProject project = sysProjectMapper.selectById(projectId);
-                    if (project != null && project.getCreatedBy() != null) {
-                        SysUser manager = sysUserMapper.selectById(project.getCreatedBy());
-                        if (manager != null && manager.getEmail() != null && !manager.getEmail().isEmpty()) {
 
-                            String subject = "【进度红绿灯报警】" + projectName + " 进度异常";
-                            String content = String.format(
-                                "尊敬的 %s：\n\n" +
-                                "系统在最新一次的无人机数据解算中，实时监测到您的项目出现进度异常，详情如下：\n\n" +
-                                "项目名称：%s\n" +
-                                "楼栋名称：%s\n" +
-                                "截止日期：%s\n" +
-                                "预警级别：%s\n" +
-                                "当前实际施工：%d 层\n\n" +
-                                "请尽快登录 XiMA 智能管控平台查看详细的三维进度偏差，并及时进行现场纠偏调度。\n\n" +
-                                "XiMA 智能管控平台 自动发送",
-                                manager.getRealName() != null ? manager.getRealName() : manager.getUsername(),
-                                projectName, buildingName, date.toString(), status, actualFloor
-                            );
+                // 1. 去数据库查一下这一天的计算记录
+                QueryWrapper<ActualProgress> query = new QueryWrapper<>();
+                query.eq("building_id", buildingId).eq("measurement_date", date);
+                ActualProgress record = actualProgressMapper.selectOne(query);
 
-                            // 调用系统底层邮件组件发送
-                            emailService.sendSimpleMail(manager.getEmail(), subject, content);
-                            System.out.println("   [主动预警] 已向项目负责人发送进度滞后告警邮件: " + manager.getEmail());
+                // 2. 精准拦截：只有当记录存在，且 isAlertSent 为空或为 0 时（代表还没发过邮件），才发！
+                if (record != null && (record.getIsAlertSent() == null || record.getIsAlertSent() == 0)) {
+                    try {
+                        SysProject project = sysProjectMapper.selectById(projectId);
+                        if (project != null && project.getCreatedBy() != null) {
+                            SysUser manager = sysUserMapper.selectById(project.getCreatedBy());
+                            if (manager != null && manager.getEmail() != null && !manager.getEmail().isEmpty()) {
+
+                                String subject = "【进度红绿灯报警】" + projectName + " 进度异常";
+                                String content = String.format(
+                                    "尊敬的 %s：\n\n" +
+                                    "系统在最新一次的无人机数据解算中，实时监测到您的项目出现进度异常，详情如下：\n\n" +
+                                    "项目名称：%s\n" +
+                                    "楼栋名称：%s\n" +
+                                    "截止日期：%s\n" +
+                                    "预警级别：%s\n" +
+                                    "当前实际施工：%d 层\n\n" +
+                                    "请尽快登录 XiMA 智能管控平台查看详细的三维进度偏差，并及时进行现场纠偏调度。\n\n" +
+                                    "XiMA 智能管控平台 自动发送",
+                                    manager.getRealName() != null ? manager.getRealName() : manager.getUsername(),
+                                    projectName, buildingName, date.toString(), status, actualFloor
+                                );
+
+                                emailService.sendSimpleMail(manager.getEmail(), subject, content);
+                                System.out.println("   [主动预警] 已向项目负责人发送进度滞后告警邮件: " + manager.getEmail());
+
+                                // 3. 发送成功后，更新标记为 1 (已发送)
+                                record.setIsAlertSent(1);
+                                actualProgressMapper.updateById(record);
+                            }
                         }
+                    } catch (Exception e) {
+                        System.err.println("   [主动预警] 发送滞后告警邮件失败: " + e.getMessage());
                     }
-                } catch (Exception e) {
-                    System.err.println("   [主动预警] 发送滞后告警邮件失败: " + e.getMessage());
+                } else {
+                    // 如果是 1，则静默跳过，避免控制台太乱，你可以根据需要保留或删除这句日志
+                    // System.out.println("   [主动预警拦截] 该日期的滞后告警已发送过，跳过。");
                 }
             }
 
             // 这里可以扩展将状态存入数据库
         }
-
 
     /**
      * 保存进度记录 (带"单调递增"棘轮修正)

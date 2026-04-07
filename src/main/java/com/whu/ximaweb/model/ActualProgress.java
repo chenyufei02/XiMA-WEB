@@ -27,8 +27,9 @@ public class ActualProgress {
     private BigDecimal droneAlt;
     private Boolean isH2Measured;
     private Integer floorLevel;
+    // 新增：是否已发送预警邮件 (0=未发送, 1=已发送)
+    private Integer isAlertSent;
 
-    // 👇👇👇 【请新增这个字段】 👇👇👇
     /**
      * 参与当日计算的有效照片数量
      * (用于前端判断数据的可信度：<3张显示黄色预警)
