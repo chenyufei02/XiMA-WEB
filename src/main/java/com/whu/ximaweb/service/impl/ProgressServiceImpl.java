@@ -141,7 +141,7 @@ public class ProgressServiceImpl implements ProgressService {
                 double lng = (photo.getLrfTargetLng() != null) ? photo.getLrfTargetLng().doubleValue() : photo.getGpsLng().doubleValue();
 
                 // 缓冲区判定 (保持你原来的25.0米)
-                if (isInsideOrBuffered(lat, lng, fence, 10.0)) {
+                if (isInsideOrBuffered(lat, lng, fence, 20.0)) {
                     String dateStr = photo.getShootTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
 
                     RawData data = new RawData();
